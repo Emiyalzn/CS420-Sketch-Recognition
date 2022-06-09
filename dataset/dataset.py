@@ -1,9 +1,16 @@
 import torch
 from torch.utils.data import Dataset
 import h5py
+import math
+import random
 import numpy as np
+import os
 import os.path as osp
 import pickle
+import cv2
+import six
+
+import dataset.utils as utils
 
 class QuickDrawDataset(Dataset):
     mode_indices = {'train': 0, 'valid': 1, 'test':2}
@@ -89,3 +96,174 @@ def train_data_collate(batch):
         sorted_arr = np.array([v[idx] for idx in sort_indices])
         batch_collate[k] = torch.from_numpy(sorted_arr)
     return batch_collate
+
+
+#! paddingLength is 150 in default. 
+#! But it is recommended to manually set @property `paddingLength`
+#! after obtaining maxSeqLen of train, valid and test sets.
+class SketchDataset(Dataset):
+    allowedModes = {'train', 'valid', 'test'}
+
+    def __init__(self, 
+                 mode: str,
+                 data_seq_dir: str,
+                 data_img_dir: str,
+                 categories: list,
+                 paddingLength: int=150,    
+                 random_scale_factor: float=0.0,    # max randomly scale ratio (for sequences) (in absolute value)
+                 augment_stroke_prob: float=0.0,    # data augmentation probability (for sequences)
+                 img_scale_ratio: float=1.0,        # min randomly scaled ratio (for sequences) [0, 1]
+                 img_rotate_angle: float=0.0,       # max randomly rotate angle (for images) (in absolute value, degree)
+                 img_translate_dist: float=0.0,     # max randomly translate distance (for images) (in absolute value, pixel)
+                 ):
+        super(SketchDataset, self).__init__()
+        
+        assert (mode in SketchDataset.allowedModes), f"[x] mode '{mode}' is not supported."
+
+        self.mode = mode
+        self.categories = categories
+        self._paddingLength = paddingLength
+        self.random_scale_factor = random_scale_factor
+        self.augment_stroke_prob = augment_stroke_prob
+        self.img_scale_ratio = img_scale_ratio
+        self.img_rotate_angle = img_rotate_angle
+        self.img_translate_dist = img_translate_dist
+        
+        self.seqs = None
+        self.imgs = None
+        self.labels = None
+
+        for i, ctg in enumerate(categories):
+            # load sequence data
+            seq_path = os.path.join(data_seq_dir, ctg + '.npz')
+            if six.PY3:
+                seq_data = np.load(seq_path, encoding='latin1', allow_pickle=True)
+            else:
+                seq_data = np.load(seq_path, allow_pickle=True)
+                
+            print(f"[*] Loaded {len(seq_data[self.mode])} {mode} sequences from {ctg + '.npz'}")
+            
+            if self.seqs is None:
+                self.seqs = seq_data[self.mode]
+            else:
+                self.seqs = np.concatenate((self.seqs, seq_data[self.mode]))
+
+            # load img data
+            img_path = os.path.join(data_img_dir, ctg + '.npz')
+            if six.PY3:
+                img_data = np.load(img_path, encoding='latin1', allow_pickle=True)
+            else:
+                img_data = np.load(img_path, allow_pickle=True)
+            
+            assert (len(img_data[self.mode]) == len(seq_data[self.mode])), f'[x] Category {ctg} has {len(img_data[self.mode])} images but {len(seq_data[self.mode])} sequences.'
+            print(f"[*] Loaded {len(seq_data[self.mode])} {mode} images from {ctg + '.npz'}")
+            
+            if self.imgs is None:
+                self.imgs = img_data[self.mode]
+            else:
+                self.imgs = np.concatenate((self.imgs, img_data[self.mode]))
+
+            # create labels
+            if self.labels is None:
+                self.labels = i * np.ones([len(seq_data[self.mode])], dtype=np.int)
+            else:
+                self.labels = np.concatenate([self.labels, i * np.ones([len(seq_data[self.mode])], dtype=np.int)])
+
+
+    def __getitem__(self, index):
+        data = self.random_scale_seq(self.seqs[index])
+        if self.augment_stroke_prob > 0:
+            data = utils.augment_strokes(data, self.augment_stroke_prob)
+        strokes_3d = data
+        strokes_5d = utils.seq_3d_to_5d(strokes_3d,self.paddingLength)
+
+        data = np.copy(self.imgs[index])
+        img = np.reshape(data, [1,data.shape[0],data.shape[1]])
+        img = self.random_scale_img(img)
+        img = self.random_rotate_img(img)
+        img = self.random_translate_img(img)
+        # img.shape: [1, 28, 28]
+        img = img.reshape(img.shape[1:])    
+        # img.shape: [28, 28]
+        label = self.labels[index]
+        return strokes_5d, img, label
+    
+    
+    def __len__(self):
+        return len(self.labels)
+    
+    
+    def __del__(self):
+        self.dispose()
+
+
+    def random_scale_seq(self, data):
+        """ Augment data by stretching x and y axis randomly [1-e, 1+e] """
+        x_scale_factor = (np.random.random() - 0.5) * 2 * self.random_scale_factor + 1.0
+        y_scale_factor = (np.random.random() - 0.5) * 2 * self.random_scale_factor + 1.0
+        result = data.astype(dtype=np.double, order='A', copy=True)
+        result[:, 0] *= x_scale_factor
+        result[:, 1] *= y_scale_factor
+        return result
+
+
+    def random_scale_img(self, data):
+        """ Randomly scale image """
+        out_imgs = np.copy(data)
+        for i in range(data.shape[0]):
+            in_img = data[i]
+            ratio = random.uniform(self.img_scale_ratio,1)
+            out_img = utils.rescale(in_img, ratio)
+            out_imgs[i] = out_img
+        return out_imgs
+
+
+    def random_rotate_img(self, data):
+        """ Randomly rotate image """
+        out_imgs = np.copy(data)
+        for i in range(data.shape[0]):
+            in_img = data[i]
+            angle = random.uniform(-self.img_rotate_angle,self.img_rotate_angle)
+            out_img = utils.rotate(in_img, angle)
+            out_imgs[i] = out_img
+        return out_imgs
+
+
+    def random_translate_img(self, data):
+        """ Randomly translate image """
+        out_imgs = np.copy(data)
+        for i in range(data.shape[0]):
+            in_img = data[i]
+            dx = random.uniform(-self.img_translate_dist,self.img_translate_dist)
+            dy = random.uniform(-self.img_translate_dist,self.img_translate_dist)
+            out_img = utils.translate(in_img, dx, dy)
+            out_imgs[i] = out_img
+        return out_imgs
+    
+    
+    def num_categories(self):
+        return len(self.categories)
+    
+    
+    def dispose(self):
+        del self.seqs
+        del self.imgs
+        del self.labels
+    
+    
+    @property
+    def maxSeqLen(self):
+        maxLen = 0
+        for seq in self.seqs:
+            maxLen = max(maxLen, len(seq))
+        return maxLen
+    
+    
+    @property
+    def paddingLength(self):
+        return self._paddingLength
+    
+    
+    @paddingLength.setter
+    def paddingLength(self, newPaddingLength):
+        self._paddingLength = newPaddingLength
