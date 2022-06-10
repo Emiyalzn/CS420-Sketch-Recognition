@@ -7,7 +7,7 @@ import sys
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import torchvision
+from torchvision import transforms
 import tqdm
 from torch.utils.data import DataLoader
 from torch.optim import lr_scheduler
@@ -26,6 +26,13 @@ class SketchCNNTrain(BaseTrain):
     def __init__(self, args=None):
         local_dir = os.path.join("../results", f'cnn-{datetime.now().strftime("%Y%m%d-%H%M")}')
         super(SketchCNNTrain, self).__init__(local_dir, args)
+        
+        self.transform = transforms.Compose([
+            transforms.Resize(224),                             #* H and W are expected to be at least 224 for torchvision models.
+            transforms.Normalize(mean=[0.485, 0.456, 0.406],    #* All pre-trained models expect input images normalized in the same way
+                                 std=[0.229, 0.224, 0.225])
+        ])
+        # https://pytorch.org/vision/stable/models.html#:~:text=eval()%20for%20details.-,All%20pre%2Dtrained%20models%20expect%20input%20images%20normalized%20in%20the%20same%20way,-%2C%20i.e.%20mini
 
     def add_args(self, arg_parser):
         arg_parser.add_argument('--model_fn', type=str, default='resnet50')
@@ -62,9 +69,10 @@ class SketchCNNTrain(BaseTrain):
 
     def forward_batch(self, model, data_batch, mode, optimizer, criterion):
         is_train = mode == 'train'
+        # import pdb; pdb.set_trace()
 
         # sequences = data_batch[0].to(self.device)
-        images = data_batch[1].to(self.device)
+        images = self.transform(data_batch[1].repeat([1, 3, 1, 1]).contiguous()).to(self.device)
         categories = data_batch[2].to(self.device)
 
         if is_train:

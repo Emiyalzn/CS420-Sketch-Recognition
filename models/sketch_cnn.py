@@ -35,8 +35,6 @@ class SketchCNN(BaseModel):
 
     def __call__(self, seqs, images):
         #* `seqs` is not used in this model
-
-        images = images.repeat(1, 3, 1, 1)
         cnnfeat = self.cnn(images)
         logits = self.fc(cnnfeat)
 

@@ -8,7 +8,7 @@ if __name__ == '__main__':
         
         '--data_seq_dir', '/home/purewhite/workspace/cs420/project/data/dataset_raw',
         '--data_img_dir', '/home/purewhite/workspace/cs420/project/data/dataset_processed_28',
-        '--categories', str(['bear', 'cat', 'crocodile']),
+        '--categories', str(['bear', 'cat']),
         
         '--batch_size', str(8),
         '--num_epoch', str(2)

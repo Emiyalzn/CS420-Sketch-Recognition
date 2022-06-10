@@ -9,6 +9,7 @@ import os.path as osp
 import pickle
 import cv2
 import six
+from torchvision import transforms
 
 import dataset.utils as utils
 
@@ -132,6 +133,15 @@ class SketchDataset(Dataset):
         self.seqs = None
         self.imgs = None
         self.labels = None
+        
+        # self.transform = transforms.Compose([
+        #     transforms.RandomResizedCrop(224, scale=(img_scale_ratio, 1)),  #* including scaling and translation.
+        #     transforms.RandomRotation(img_rotate_angle),
+        #     transforms.RandomHorizontalFlip(),
+        #     transforms.ToTensor(),
+        #     transforms.Normalize(mean=[0.485, 0.456, 0.406],    #* All pre-trained models expect input images normalized in the same way
+        #                          std=[0.229, 0.224, 0.225])
+        # ])
 
         for i, ctg in enumerate(categories):
             # load sequence data
@@ -184,8 +194,13 @@ class SketchDataset(Dataset):
         img = self.random_translate_img(img)
         # img.shape: [1, 28, 28], [C, H, W]
         label = self.labels[index]
-        return strokes_5d, img.astype(dtype=np.float32, order='A', copy=False), label
-    
+        return strokes_5d, img.astype(dtype=np.float32, order='A', copy=False) / 255.0, label
+        
+        # data = np.copy(self.imgs[index])
+        # img = np.reshape(data, [1,data.shape[0],data.shape[1]]).astype(dtype=np.float32) / 255.0
+        # img = self.transform(img.repeat([1, 3, 1, 1]))
+        # return strokes_5d, img, label
+        
     
     def __len__(self):
         return len(self.labels)
@@ -195,6 +210,7 @@ class SketchDataset(Dataset):
         self.dispose()
 
 
+    # TODO: Should data augmentation of image be coherent with that of sequence?
     def random_scale_seq(self, data):
         """ Augment data by stretching x and y axis randomly [1-e, 1+e] """
         x_scale_factor = (np.random.random() - 0.5) * 2 * self.random_scale_factor + 1.0
