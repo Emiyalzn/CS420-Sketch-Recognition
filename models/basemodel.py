@@ -40,6 +40,29 @@ class BaseModel(object):
                 res.extend(_get_net_params(net, net_name))
         return res
 
+    def params_to_optimize(self, l2_weight_decay=1e-4, excludes=('bias',)):
+        if l2_weight_decay > 0:
+            if excludes is None:
+                excludes = list()
+
+            decay_params = list()
+            nondecay_params = list()
+
+            named_params = self.params(True, named=True, add_prefix=False)
+            for param_name, param_data in named_params:
+                use_decay = True
+                for kw in excludes:
+                    if kw in param_name:
+                        use_decay = False
+                        break
+                if use_decay:
+                    decay_params.append(param_data)
+                else:
+                    nondecay_params.append(param_data)
+            return [{'params': decay_params, 'weight_decay': l2_weight_decay}, {'params': nondecay_params, 'weight_decay': 0}]
+        else:
+            return self.params(True, named=False, add_prefix=False)
+
     def print_params(self):
         print('[*] Model Parameters:')
         for nid, net in enumerate(self._nets):

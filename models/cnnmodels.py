@@ -57,6 +57,55 @@ class DenseNet161Backbone(CNNBackbone):
         out = F.avg_pool2d(out, kernel_size=7, stride=1).view(features.size(0), -1)
         return out
 
+class EfficientNetB0Backbone(CNNBackbone):
+    def _init(self):
+        cnn = torchvision.models.efficientnet_b0(pretrained=self.pretrained)
+
+        if self.in_channels in [1, 3]:
+            self.features = cnn.features
+            print('[*] EfficientNetB0Backbone: use pretrained conv0 with {} input channels'.format(
+                self.features[0][0].in_channels))
+        else:
+            from collections import OrderedDict
+            print('[*] EfficientNetB0Backbone: cnn.features -', cnn.features.__class__.__name__)
+            module_dict = OrderedDict()
+            for name, module in cnn.features.named_children():
+                if name == '0':
+                    # print('name == 0')
+                    submodule0_dict = OrderedDict()
+                    for subname, submodule in module.named_children():
+                        if (subname == '0'):
+                            # print('subname == 0')
+                            
+                            # Original EfficientNetB0:
+                            # Conv2d(3, 32, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), bias=False)
+                            submodule0_dict[subname + '_new'] = nn.Conv2d(
+                                in_channels=self.in_channels,
+                                out_channels=submodule.out_channels,
+                                kernel_size=submodule.kernel_size,
+                                stride=submodule.stride,
+                                padding=submodule.padding,
+                                bias=False
+                            )
+                        else:
+                            submodule0_dict[subname] = submodule
+                    module_dict[name + '_new'] = nn.Sequential(submodule0_dict)
+                else:
+                    module_dict[name] = module
+            self.features = nn.Sequential(module_dict)
+            print('[*] EfficientNetB0Backbone: use a new 0-0 with {} input channels'.format(self.in_channels))
+
+        self.avgpool = cnn.avgpool
+
+        num_out_features = cnn.classifier[1].in_features
+        return num_out_features
+
+    def forward(self, x):
+        features = self.features(x)
+        out = self.avgpool(features)
+        out = out.reshape(out.shape[:2])
+        return out
+
 class ResNet50Backbone(CNNBackbone):
     def _init(self):
         cnn = torchvision.models.resnet50(pretrained=self.pretrained)
@@ -156,6 +205,7 @@ CNN_MODELS = {
     'densenet161': DenseNet161Backbone,
     'resnet50': ResNet50Backbone,
     'sketchanet': SketchANetBackbone,
+    'efficientnet_b0': EfficientNetB0Backbone
 }
 
 CNN_IMAGE_SIZES = {

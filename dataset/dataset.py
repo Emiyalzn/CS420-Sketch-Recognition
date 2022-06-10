@@ -109,7 +109,7 @@ class SketchDataset(Dataset):
                  data_seq_dir: str,
                  data_img_dir: str,
                  categories: list,
-                 paddingLength: int=150,    
+                 paddingLength: int=226,            # 226 in our dataset. For new dataset, this should be recomputed.
                  random_scale_factor: float=0.0,    # max randomly scale ratio (for sequences) (in absolute value)
                  augment_stroke_prob: float=0.0,    # data augmentation probability (for sequences)
                  img_scale_ratio: float=1.0,        # min randomly scaled ratio (for sequences) [0, 1]
@@ -182,11 +182,9 @@ class SketchDataset(Dataset):
         img = self.random_scale_img(img)
         img = self.random_rotate_img(img)
         img = self.random_translate_img(img)
-        # img.shape: [1, 28, 28]
-        img = img.reshape(img.shape[1:])    
-        # img.shape: [28, 28]
+        # img.shape: [1, 28, 28], [C, H, W]
         label = self.labels[index]
-        return strokes_5d, img, label
+        return strokes_5d, img.astype(dtype=np.float32, order='A', copy=False), label
     
     
     def __len__(self):

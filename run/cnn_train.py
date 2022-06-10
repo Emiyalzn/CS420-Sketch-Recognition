@@ -11,90 +11,95 @@ import torchvision
 import tqdm
 from torch.utils.data import DataLoader
 from torch.optim import lr_scheduler
+from datetime import datetime
+import ast
 
-from dataset.dataset import QuickDrawDataset, train_data_collate
+from dataset.dataset import SketchDataset
+from models.cnnmodels import CNN_MODELS, CNN_IMAGE_SIZES
+from models.sketch_cnn import SketchCNN
 from utils.logger import Logger
 from utils.utils import args_print, fix_seed
 
+from .base_train import BaseTrain
 
-class BaseTrain(object):
-    def __init__(self, local_dir, args=None):
-        if (args is not None):
-            self.config = self._parse_args(args)
-        else:
-            self.config = self._parse_args()
-        self.modes = ['train', 'valid']
-        self.step_counters = {m: 0 for m in self.modes}
-        self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-
-        # init folder and logger
-        self.model_dir = os.path.join(local_dir, "model")
-        os.makedirs(self.model_dir, exist_ok=True)
-        self.logger = Logger.init_logger(filename=local_dir + '/_output_.log')
-        args_print(self.config, self.logger)
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        pass
-
-    def _parse_args(self, args=None):
-        arg_parser = argparse.ArgumentParser()
-        arg_parser.add_argument('--batch_size', type=int, default=48)
-        arg_parser.add_argument('--lr_step', type=int, default=-1)
-        arg_parser.add_argument('--lr', type=float, default=0.0001)
-        arg_parser.add_argument('--weight_decay', type=float, default=-1)
-        arg_parser.add_argument('--seed', type=int, default=42)
-        arg_parser.add_argument('--num_epoch', type=int, default=1)
-        arg_parser.add_argument('--valid_freq', type=int, default=1)
-        
-        # Added for compatibility
-        arg_parser.add_argument('--ckpt_nets', nargs='*')
-        arg_parser.add_argument('--ckpt_prefix', type=str, default=None)
-
-        arg_parser = self.add_args(arg_parser)
-        
-        config = vars(arg_parser.parse_args(args))
-
-        if config['seed'] is None:
-            config['seed'] = random.randint(0, 2 ** 31 - 1)
-        fix_seed(config['seed'])
-
-        return config
+class SketchCNNTrain(BaseTrain):
+    def __init__(self, args=None):
+        local_dir = os.path.join("../results", f'cnn-{datetime.now().strftime("%Y%m%d-%H%M")}')
+        super(SketchCNNTrain, self).__init__(local_dir, args)
 
     def add_args(self, arg_parser):
+        arg_parser.add_argument('--model_fn', type=str, default='resnet50')
+        
+        arg_parser.add_argument('--data_seq_dir', type=str, required=True)
+        arg_parser.add_argument('--data_img_dir', type=str, required=True)
+        arg_parser.add_argument('--categories', type=ast.literal_eval, default="['bear', 'cat', 'crocodile', 'elephant', 'giraffe', 'horse', 'lion', 'owl', 'penguin', 'raccoon', 'sheep', 'tiger', 'zebra', 'camel', 'cow', 'dog', 'flamingo', 'hedgehog', 'kangaroo', 'monkey', 'panda', 'pig', 'rhinoceros', 'squirrel', 'whale']")
+        
+        arg_parser.add_argument('--paddingLength', type=int, default=226)
+        arg_parser.add_argument('--random_scale_factor', type=float, default=0.0)
+        arg_parser.add_argument('--augment_stroke_prob', type=float, default=0.0)
+        arg_parser.add_argument('--img_scale_ratio', type=float, default=1.0)
+        arg_parser.add_argument('--img_rotate_angle', type=float, default=0.0)
+        arg_parser.add_argument('--img_translate_dist', type=float, default=0.0)
         return arg_parser
 
-    def checkpoint_prefix(self):
-        return self.config['ckpt_prefix']
-
-    def weight_decay_excludes(self):
-        return ['bias']
-
-    def prepare_dataset(self, dataset_dict):
-        pass
+    def create_data_loaders(self, dataset_dict):
+        data_loaders = {
+            m: DataLoader(dataset_dict[m],
+                          batch_size=self.config['batch_size'],
+                          num_workers=3 if m == 'train' else 1,
+                          shuffle=True if m == 'train' else False,
+                          drop_last=True,
+                          pin_memory=True) for m in self.modes
+        }
+        return data_loaders
 
     def create_model(self, num_categories):
-        raise NotImplementedError
+        model_fn = self.config['model_fn']
 
-    def create_data_loaders(self, dataset_dict):
-        raise NotImplementedError
+        return SketchCNN(CNN_MODELS[model_fn],
+                         num_categories,
+                         device=self.device)
 
     def forward_batch(self, model, data_batch, mode, optimizer, criterion):
-        raise NotImplementedError
+        is_train = mode == 'train'
+
+        # sequences = data_batch[0].to(self.device)
+        images = data_batch[1].to(self.device)
+        categories = data_batch[2].to(self.device)
+
+        if is_train:
+            optimizer.zero_grad()
+        with torch.set_grad_enabled(is_train):
+            logits = model(seqs=None, images=images)
+            loss = criterion(logits, categories)
+            if is_train:
+                loss.backward()
+                optimizer.step()
+
+        return logits, loss, categories
 
     def run(self):
         weight_decay = self.config['weight_decay']
         lr = self.config['lr']
         lr_step = self.config['lr_step']
-        num_epochs = self.config['num_epochs']
+        num_epochs = self.config['num_epoch']
         valid_freq = self.config['valid_freq']
         train_data = {
-            m: QuickDrawDataset(m) for m in self.modes
+            m: SketchDataset(
+                mode=m,
+                data_seq_dir=self.config['data_seq_dir'],
+                data_img_dir=self.config['data_img_dir'],
+                categories=self.config['categories'],
+                paddingLength=self.config['paddingLength'],
+                random_scale_factor=self.config['random_scale_factor'],
+                augment_stroke_prob=self.config['augment_stroke_prob'],
+                img_scale_ratio=self.config['img_scale_ratio'],
+                img_rotate_angle=self.config['img_rotate_angle'],
+                img_translate_dist=self.config['img_translate_dist'],
+            ) for m in self.modes
         }
         self.prepare_dataset(train_data)
-        num_categories = train_data[self.modes[0]].num_categories()
+        num_categories = len(self.config['categories'])
         self.logger.info(f"Number of categories: {num_categories}")
 
         net = self.create_model(num_categories)
@@ -161,3 +166,4 @@ class BaseTrain(object):
 
         for m in self.modes:
             train_data[m].dispose()
+
