@@ -18,13 +18,14 @@ from .base_train import BaseTrain
 
 
 class SketchR2CNNTrain(BaseTrain):
-    def __init__(self):
+    def __init__(self, args=None):
         local_dir = os.path.join("results", f'sketch-r2cnn-{datetime.now().strftime("%Y%m%d-%H%M")}')
-        super(SketchR2CNNTrain).__init__(local_dir)
+        super(SketchR2CNNTrain, self).__init__(local_dir, args)
 
     def add_args(self, arg_parser):
         arg_parser.add_argument('--dropout', type=float, default=0.5)
         arg_parser.add_argument('--intensity_channels', type=int, default=1)
+        arg_parser.add_argument('--thickness', type=float, default=1.0)
         # If `intensity_channels` in {1, 3} then can convert it to 3-channel
         # and the model can remain unchanged.
         # Otherwise the first conv layer should be reconstructed.
@@ -32,7 +33,6 @@ class SketchR2CNNTrain(BaseTrain):
         
         arg_parser.add_argument('--data_seq_dir', type=str, default=None)
         arg_parser.add_argument('--data_img_dir', type=str, default=None)
-        arg_parser.add_argument('--categories', type=ast.literal_eval, default="['bear', 'cat', 'crocodile', 'elephant', 'giraffe', 'horse', 'lion', 'owl', 'penguin', 'raccoon', 'sheep', 'tiger', 'zebra', 'camel', 'cow', 'dog', 'flamingo', 'hedgehog', 'kangaroo', 'monkey', 'panda', 'pig', 'rhinoceros', 'squirrel', 'whale']")
         
         arg_parser.add_argument('--paddingLength', type=int, default=226)
         arg_parser.add_argument('--random_scale_factor', type=float, default=0.0)
@@ -76,10 +76,10 @@ class SketchR2CNNTrain(BaseTrain):
     def forward_batch(self, model, data_batch, mode, optimizer, criterion):
         is_train = mode == 'train'
 
-        points = data_batch['points3'].to(self.device)
-        points_offset = data_batch['points3_offset'].to(self.device)
-        points_length = data_batch['points_length']
-        category = data_batch['category'].to(self.device)
+        points = data_batch['points3'].to(self.device).contiguous()
+        points_offset = data_batch['points3_offset'].to(self.device).contiguous()
+        points_length = data_batch['points3_length'].contiguous()
+        category = data_batch['category'].to(self.device).contiguous()
 
         if is_train:
             optimizer.zero_grad()
@@ -96,7 +96,7 @@ class SketchR2CNNTrain(BaseTrain):
         weight_decay = self.config['weight_decay']
         lr = self.config['lr']
         lr_step = self.config['lr_step']
-        num_epochs = self.config['num_epochs']
+        num_epochs = self.config['num_epoch']
         valid_freq = self.config['valid_freq']
         train_data = {
             m: R2CNNDataset(
