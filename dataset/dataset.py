@@ -352,6 +352,12 @@ class SketchDataset(Dataset):
         result[:, 1] *= y_scale_factor
         return result
 
+    def stroke_removal(self, data):
+        pass
+
+    def stroke_deform(self, data):
+        pass
+
     def random_scale_img(self, data):
         """ Randomly scale image """
         out_imgs = np.copy(data)
