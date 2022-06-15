@@ -38,7 +38,7 @@ class SketchR2CNNTrain(BaseTrain):
         arg_parser.add_argument('--img_rotate_angle', type=float, default=0.0)
         arg_parser.add_argument('--img_translate_dist', type=float, default=0.0)
         
-        arg_parser.add_argument('--disable_augmentation', action='store_true')
+        arg_parser.add_argument('--disable_augmentation', action='store_false')
         
         return arg_parser
 
@@ -95,6 +95,8 @@ class SketchR2CNNTrain(BaseTrain):
         lr_step = self.config['lr_step']
         num_epochs = self.config['num_epoch']
         valid_freq = self.config['valid_freq']
+        self.config['data_img_dir'] = None  # set none to avoid load figures
+
         train_data = {
             m: R2CNNDataset(
                 mode=m,

@@ -13,7 +13,6 @@ class SketchRNN(BaseModel):
                  device=None):
         super().__init__()
 
-        self.eps = 1e-4
         self.device = device
 
         nets = list()
