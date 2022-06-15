@@ -54,7 +54,7 @@ def rescale(X, ratio=0.85):
     dw = int((w - w2) / 2)
 
     res = np.copy(X)
-    res[:,:] = 1
+    res[:,:] = 255
     res[dh:(dh+h2),dw:(dw+w2)] = X2
 
     return res
@@ -77,7 +77,7 @@ def rotate(X, angle=15):
     res_w = int(math.ceil(nw))
     res_h = int(math.ceil(nh))
 
-    res = cv2.warpAffine(X,rot_mat,(res_w,res_h),flags=cv2.INTER_LANCZOS4, borderValue=1)
+    res = cv2.warpAffine(X,rot_mat,(res_w,res_h),flags=cv2.INTER_LANCZOS4, borderValue=255)
     res = cv2.resize(res,(w,h), interpolation=cv2.INTER_AREA)
 
     return res
@@ -87,6 +87,6 @@ def translate(X, dx=5,dy=5):
     """ Translate the image """
     h, w = X.shape
     M = np.float32([[1,0,dx],[0,1,dy]])
-    res = cv2.warpAffine(X,M,(w,h), borderValue=1)
+    res = cv2.warpAffine(X,M,(w,h), borderValue=255)
 
     return res

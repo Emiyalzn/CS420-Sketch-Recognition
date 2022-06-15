@@ -1,5 +1,6 @@
 import warnings
 from run.cnn_train import SketchCNNTrain
+from run.r2cnn_train import SketchR2CNNTrain
 
 if __name__ == '__main__':
     
@@ -21,7 +22,12 @@ if __name__ == '__main__':
         '--disable_augmentation'
     ]
     
-    with SketchCNNTrain(args) as app:
+    # with SketchCNNTrain(args) as app:
+    #     with warnings.catch_warnings():
+    #         warnings.simplefilter('ignore')
+    #         app.run()
+            
+    with SketchR2CNNTrain() as app:
         with warnings.catch_warnings():
             warnings.simplefilter('ignore')
             app.run()

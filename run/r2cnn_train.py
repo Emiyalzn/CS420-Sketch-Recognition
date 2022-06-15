@@ -15,7 +15,7 @@ from .base_train import BaseTrain
 
 class SketchR2CNNTrain(BaseTrain):
     def __init__(self):
-        local_dir = os.path.join("../results", f'sketch-r2cnn-{datetime.now().strftime("%Y%m%d-%H%M")}')
+        local_dir = os.path.join("results", f'sketch-r2cnn-{datetime.now().strftime("%Y%m%d-%H%M")}')
         super(SketchR2CNNTrain).__init__(local_dir)
 
     def add_args(self, arg_parser):
