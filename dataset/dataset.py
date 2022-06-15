@@ -13,51 +13,152 @@ from torchvision import transforms
 
 import dataset.utils as utils
 
-class QuickDrawDataset(Dataset):
-    mode_indices = {'train': 0, 'valid': 1, 'test':2}
 
-    def __init__(self, mode):
-        self.root_dir = 'data/'
+# class QuickDrawDataset(Dataset):
+#     mode_indices = {'train': 0, 'valid': 1, 'test':2}
+
+#     def __init__(self, mode):
+#         self.root_dir = 'data/'
+#         self.mode = mode
+#         self.data = None
+
+#         with open(osp.join(self.root_dir, 'categories.pkl'), 'rb') as fh:
+#             saved_pkl = pickle.load(fh)
+#             self.categories = saved_pkl['categories']
+#             self.indices = saved_pkl['indices'][self.mode_indices[mode]]
+
+#         print('[*] Created a new {} dataset: {}'.format(mode, self.root_dir))
+
+#     def __len__(self):
+#         return len(self.indices)
+
+#     def __getitem__(self, idx):
+#         if self.data is None:
+#             self.data = h5py.File(osp.join(self.root_dir, 'quickdraw_{}.hdf5'.format(self.mode)), 'r')
+
+#         index_tuple = self.indices[idx]
+#         cid = index_tuple[0]
+#         sid = index_tuple[1]
+#         sketch_path = '/sketch/{}/{}'.format(cid, sid)
+
+#         sid_points = np.array(self.data[sketch_path][()], dtype=np.float32)
+#         sample = {'points3': sid_points, 'category': cid}
+#         return sample
+
+#     def __del__(self):
+#         self.dispose()
+
+#     def dispose(self):
+#         if self.data is not None:
+#             self.data.close()
+
+#     def num_categories(self):
+#         return len(self.categories)
+
+#     def get_name_prefix(self):
+#         return 'QuickDraw-{}'.format(self.mode)
+
+
+class R2CNNDataset(Dataset):
+    allowedModes = {'train', 'valid', 'test'}
+    
+    def __init__(self, 
+                 mode: str,
+                 data_seq_dir: str,
+                 data_img_dir: str,                 # Dummy, unused
+                 categories: list,
+                 paddingLength: int=226,            # 226 in our dataset. For new dataset, this should be recomputed.
+                 random_scale_factor: float=0.0,    # max randomly scale ratio (for sequences) (in absolute value)
+                 augment_stroke_prob: float=0.0,    # data augmentation probability (for sequences)
+                 img_scale_ratio: float=1.0,        # Dummy, unused
+                 img_rotate_angle: float=0.0,       # Dummy, unused
+                 img_translate_dist: float=0.0,     # Dummy, unused
+                 disable_augmentation: bool=False   #! Whether to disable all augmentations
+                 ) -> None:
+        super(R2CNNDataset, self).__init__()
+        
+        assert (mode in SketchDataset.allowedModes), f"[x] mode '{mode}' is not supported."
+        
         self.mode = mode
-        self.data = None
+        self.categories = categories
+        self._paddingLength = paddingLength
+        self.random_scale_factor = random_scale_factor
+        self.augment_stroke_prob = augment_stroke_prob
+        self.disable_augmentation = disable_augmentation
+        
+        self.seqs = list()
+        self.labels = list()
 
-        with open(osp.join(self.root_dir, 'categories.pkl'), 'rb') as fh:
-            saved_pkl = pickle.load(fh)
-            self.categories = saved_pkl['categories']
-            self.indices = saved_pkl['indices'][self.mode_indices[mode]]
+        for i, ctg in enumerate(categories):
+            # load sequence data
+            seq_path = os.path.join(data_seq_dir, ctg + '.npz')
+            if six.PY3:
+                seq_data = np.load(seq_path, encoding='latin1', allow_pickle=True)
+            else:
+                seq_data = np.load(seq_path, allow_pickle=True)
+                
+            print(f"[*] Loaded {len(seq_data[self.mode])} {mode} sequences from {ctg + '.npz'}")
+            
+            # if self.seqs is None:
+            #     self.seqs = seq_data[self.mode]
+            # else:
+            #     self.seqs = np.concatenate((self.seqs, seq_data[self.mode]))
+            self.seqs.append(seq_data[self.mode])
 
-        print('[*] Created a new {} dataset: {}'.format(mode, self.root_dir))
+            # create labels
+            # if self.labels is None:
+            #     self.labels = i * np.ones([len(seq_data[self.mode])], dtype=np.int)
+            # else:
+            #     self.labels = np.concatenate([self.labels, i * np.ones([len(seq_data[self.mode])], dtype=np.int)])
+            self.labels.append(i * np.ones([len(seq_data[self.mode])], dtype=np.int))
+            
+        self.seqs = np.concatenate(self.seqs)
+        self.labels = np.concatenate(self.labels)
 
-    def __len__(self):
-        return len(self.indices)
-
-    def __getitem__(self, idx):
-        if self.data is None:
-            self.data = h5py.File(osp.join(self.root_dir, 'quickdraw_{}.hdf5'.format(self.mode)), 'r')
-
-        index_tuple = self.indices[idx]
-        cid = index_tuple[0]
-        sid = index_tuple[1]
-        sketch_path = '/sketch/{}/{}'.format(cid, sid)
-
-        sid_points = np.array(self.data[sketch_path][()], dtype=np.float32)
-        sample = {'points3': sid_points, 'category': cid}
+    def __getitem__(self, index):
+        # Sequence
+        data = self.seqs[index].astype(dtype=np.double, order='A', copy=False)
+        
+        # Sequence Augmentation
+        if (not self.disable_augmentation):
+            data = self.random_scale_seq(self.seqs[index])
+        if (self.augment_stroke_prob > 0 and not self.disable_augmentation):
+            data = utils.augment_strokes(data, self.augment_stroke_prob)
+        
+        # Label Augmentation
+        label = self.labels[index]
+        
+        sample = {
+            'points3': data,
+            'category': label
+        }
+        
         return sample
-
-    def __del__(self):
-        self.dispose()
-
-    def dispose(self):
-        if self.data is not None:
-            self.data.close()
+    
+    def __len__(self):
+        return len(self.labels)
+    
+    def random_scale_seq(self, data):
+        """ Augment data by stretching x and y axis randomly [1-e, 1+e] """
+        x_scale_factor = (np.random.random() - 0.5) * 2 * self.random_scale_factor + 1.0
+        y_scale_factor = (np.random.random() - 0.5) * 2 * self.random_scale_factor + 1.0
+        result = data.astype(dtype=np.double, order='A', copy=False)
+        result[:, 0] *= x_scale_factor
+        result[:, 1] *= y_scale_factor
+        return result
 
     def num_categories(self):
         return len(self.categories)
 
-    def get_name_prefix(self):
-        return 'QuickDraw-{}'.format(self.mode)
+    @property
+    def maxSeqLen(self):
+        maxLen = 0
+        for seq in self.seqs:
+            maxLen = max(maxLen, len(seq))
+        return maxLen
 
-def train_data_collate(batch):
+
+def r2cnn_collate(batch):
     length_list = [len(item['points3']) for item in batch]
     max_length = max(length_list)
 
@@ -192,7 +293,6 @@ class SketchDataset(Dataset):
         self.imgs = np.concatenate(self.imgs)
         self.labels = np.concatenate(self.labels)
 
-
     def __getitem__(self, index):
         # Sequence
         data = self.seqs[index].astype(dtype=np.double, order='A', copy=False)
@@ -225,15 +325,9 @@ class SketchDataset(Dataset):
         # img = np.reshape(data, [1,data.shape[0],data.shape[1]]).astype(dtype=np.float32) / 255.0
         # img = self.transform(img.repeat([1, 3, 1, 1]))
         # return strokes_5d, img, label
-        
     
     def __len__(self):
         return len(self.labels)
-    
-    
-    def __del__(self):
-        self.dispose()
-
 
     # TODO: Should data augmentation of image be coherent with that of sequence?
     def random_scale_seq(self, data):
@@ -245,7 +339,6 @@ class SketchDataset(Dataset):
         result[:, 1] *= y_scale_factor
         return result
 
-
     def random_scale_img(self, data):
         """ Randomly scale image """
         out_imgs = np.copy(data)
@@ -256,7 +349,6 @@ class SketchDataset(Dataset):
             out_imgs[i] = out_img
         return out_imgs
 
-
     def random_rotate_img(self, data):
         """ Randomly rotate image """
         out_imgs = np.copy(data)
@@ -266,8 +358,7 @@ class SketchDataset(Dataset):
             out_img = utils.rotate(in_img, angle)
             out_imgs[i] = out_img
         return out_imgs
-
-
+            
     def random_translate_img(self, data):
         """ Randomly translate image """
         out_imgs = np.copy(data)
@@ -279,11 +370,9 @@ class SketchDataset(Dataset):
             out_imgs[i] = out_img
         return out_imgs
     
-    
     def num_categories(self):
         return len(self.categories)
 
-    
     @property
     def maxSeqLen(self):
         maxLen = 0
@@ -291,11 +380,9 @@ class SketchDataset(Dataset):
             maxLen = max(maxLen, len(seq))
         return maxLen
     
-    
     @property
     def paddingLength(self):
         return self._paddingLength
-    
     
     @paddingLength.setter
     def paddingLength(self, newPaddingLength):
