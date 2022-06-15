@@ -94,17 +94,17 @@ class R2CNNDataset(Dataset):
 
         for i, ctg in enumerate(categories):
             # load sequence data
-            seq_path = os.path.join(data_seq_dir, 'r2cnn_' + ctg + '.npz')
-            if six.PY3:
-                seq_data = np.load(seq_path, encoding='latin1', allow_pickle=True)
-            else:
-                seq_data = np.load(seq_path, allow_pickle=True)
+            seq_path = os.path.join(data_seq_dir, 'r2cnn_' + ctg + '.npy')
+            seq_data = np.load(seq_path, encoding='latin1', allow_pickle=True).item()
                 
-            print(f"[*] Loaded {len(seq_data[self.mode])} {mode} sequences from {ctg + '.npz'}")
+            # import pdb; pdb.set_trace()
+                
+            print(f"[*] Loaded {len(seq_data[self.mode])} {self.mode} sequences from {ctg + '.npy'}")
             
-            self.seqs.append(seq_data[self.mode])
-            self.labels.append(i * np.ones([len(seq_data[self.mode])], dtype=np.int))
-            
+            self.seqs.append(np.array(seq_data[self.mode], dtype=object))
+            self.labels.append(i * np.ones([len(seq_data[self.mode])], dtype=int))
+        
+        # import pdb; pdb.set_trace()
         self.seqs = np.concatenate(self.seqs)
         self.labels = np.concatenate(self.labels)
 
@@ -260,7 +260,7 @@ class SketchDataset(Dataset):
                 else:
                     seq_data = np.load(seq_path, allow_pickle=True)
                     
-                print(f"[*] Loaded {len(seq_data[self.mode])} {mode} sequences from {ctg + '.npz'}")
+                print(f"[*] Loaded {len(seq_data[self.mode])} {self.mode} sequences from {ctg + '.npz'}")
                 
                 curLen = len(seq_data[self.mode])
                 self.seqs.append(seq_data[self.mode])
@@ -276,16 +276,16 @@ class SketchDataset(Dataset):
                 if (curLen is not None):
                     assert (len(img_data[self.mode]) == curLen), f'[x] Category {ctg} has {len(img_data[self.mode])} images but {len(seq_data[self.mode])} sequences.'
                 curLen = len(img_data[self.mode])
-                print(f"[*] Loaded {len(img_data[self.mode])} {mode} images from {ctg + '.npz'}")
+                print(f"[*] Loaded {len(img_data[self.mode])} {self.mode} images from {ctg + '.npz'}")
                 
                 self.imgs.append(img_data[self.mode])
 
             # create labels
             # if self.labels is None:
-            #     self.labels = i * np.ones([len(seq_data[self.mode])], dtype=np.int)
+            #     self.labels = i * np.ones([len(seq_data[self.mode])], dtype=int)
             # else:
-            #     self.labels = np.concatenate([self.labels, i * np.ones([len(seq_data[self.mode])], dtype=np.int)])
-            self.labels.append(i * np.ones([curLen], dtype=np.int))
+            #     self.labels = np.concatenate([self.labels, i * np.ones([len(seq_data[self.mode])], dtype=int)])
+            self.labels.append(i * np.ones([curLen], dtype=int))
         
         self.seqs = np.concatenate(self.seqs) if (data_seq_dir is not None) else None
         self.imgs = np.concatenate(self.imgs) if (data_img_dir is not None) else None
