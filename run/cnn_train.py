@@ -22,14 +22,16 @@ from .base_train import BaseTrain
 
 class SketchCNNTrain(BaseTrain):
     def __init__(self, args=None):
-        local_dir = os.path.join("results", f'cnn-{datetime.now().strftime("%Y%m%d-%H%M")}')
+        local_dir = os.path.join("results", f'cnn-{datetime.now().strftime("%Y%m%d-%H%M%S")}')
         super(SketchCNNTrain, self).__init__(local_dir, args)
         
-        self.transform = transforms.Compose([
-            transforms.Resize(224),                             #* H and W are expected to be at least 224 for torchvision models.
-            transforms.Normalize(mean=[0.485, 0.456, 0.406],    #* All pre-trained models expect input images normalized in the same way
-                                 std=[0.229, 0.224, 0.225])
-        ])
+        self.transform = transforms.Resize(CNN_IMAGE_SIZES[self.config['model_fn']])
+        if (self.config['model_fn'] in ['densenet161', 'resnet50', 'efficientnet_b0']):
+            self.transform = transforms.Compose([
+                self.transform,
+                transforms.Normalize(mean=[0.485, 0.456, 0.406],                         #* All torchvision pre-trained models expect input images normalized in the same way
+                                     std=[0.229, 0.224, 0.225])
+            ])
         # https://pytorch.org/vision/stable/models.html#:~:text=eval()%20for%20details.-,All%20pre%2Dtrained%20models%20expect%20input%20images%20normalized%20in%20the%20same%20way,-%2C%20i.e.%20mini
 
     def add_args(self, arg_parser):
