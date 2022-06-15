@@ -94,7 +94,7 @@ class R2CNNDataset(Dataset):
 
         for i, ctg in enumerate(categories):
             # load sequence data
-            seq_path = os.path.join(data_seq_dir, ctg + '.npz')
+            seq_path = os.path.join(data_seq_dir, 'r2cnn_' + ctg + '.npz')
             if six.PY3:
                 seq_data = np.load(seq_path, encoding='latin1', allow_pickle=True)
             else:
@@ -102,17 +102,7 @@ class R2CNNDataset(Dataset):
                 
             print(f"[*] Loaded {len(seq_data[self.mode])} {mode} sequences from {ctg + '.npz'}")
             
-            # if self.seqs is None:
-            #     self.seqs = seq_data[self.mode]
-            # else:
-            #     self.seqs = np.concatenate((self.seqs, seq_data[self.mode]))
             self.seqs.append(seq_data[self.mode])
-
-            # create labels
-            # if self.labels is None:
-            #     self.labels = i * np.ones([len(seq_data[self.mode])], dtype=np.int)
-            # else:
-            #     self.labels = np.concatenate([self.labels, i * np.ones([len(seq_data[self.mode])], dtype=np.int)])
             self.labels.append(i * np.ones([len(seq_data[self.mode])], dtype=np.int))
             
         self.seqs = np.concatenate(self.seqs)
