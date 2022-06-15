@@ -30,16 +30,16 @@ class SketchR2CNNTrain(BaseTrain):
         # Otherwise the first conv layer should be reconstructed.
         arg_parser.add_argument('--model_fn', type=str, default='resnet50')
         
-        arg_parser.add_argument('--data_seq_dir', type=str, required=True)
-        # arg_parser.add_argument('--data_img_dir', type=str, required=True)
+        arg_parser.add_argument('--data_seq_dir', type=str, default=None)
+        arg_parser.add_argument('--data_img_dir', type=str, default=None)
         arg_parser.add_argument('--categories', type=ast.literal_eval, default="['bear', 'cat', 'crocodile', 'elephant', 'giraffe', 'horse', 'lion', 'owl', 'penguin', 'raccoon', 'sheep', 'tiger', 'zebra', 'camel', 'cow', 'dog', 'flamingo', 'hedgehog', 'kangaroo', 'monkey', 'panda', 'pig', 'rhinoceros', 'squirrel', 'whale']")
         
         arg_parser.add_argument('--paddingLength', type=int, default=226)
         arg_parser.add_argument('--random_scale_factor', type=float, default=0.0)
         arg_parser.add_argument('--augment_stroke_prob', type=float, default=0.0)
-        # arg_parser.add_argument('--img_scale_ratio', type=float, default=1.0)
-        # arg_parser.add_argument('--img_rotate_angle', type=float, default=0.0)
-        # arg_parser.add_argument('--img_translate_dist', type=float, default=0.0)
+        arg_parser.add_argument('--img_scale_ratio', type=float, default=1.0)
+        arg_parser.add_argument('--img_rotate_angle', type=float, default=0.0)
+        arg_parser.add_argument('--img_translate_dist', type=float, default=0.0)
         
         arg_parser.add_argument('--disable_augmentation', action='store_true')
         

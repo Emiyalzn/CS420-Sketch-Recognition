@@ -261,70 +261,74 @@ class SketchDataset(Dataset):
 
         for i, ctg in enumerate(categories):
             # load sequence data
-            seq_path = os.path.join(data_seq_dir, ctg + '.npz')
-            if six.PY3:
-                seq_data = np.load(seq_path, encoding='latin1', allow_pickle=True)
-            else:
-                seq_data = np.load(seq_path, allow_pickle=True)
-                
-            print(f"[*] Loaded {len(seq_data[self.mode])} {mode} sequences from {ctg + '.npz'}")
+            curLen = None
             
-            # if self.seqs is None:
-            #     self.seqs = seq_data[self.mode]
-            # else:
-            #     self.seqs = np.concatenate((self.seqs, seq_data[self.mode]))
-            self.seqs.append(seq_data[self.mode])
+            if (data_seq_dir is not None):
+                seq_path = os.path.join(data_seq_dir, ctg + '.npz')
+                if six.PY3:
+                    seq_data = np.load(seq_path, encoding='latin1', allow_pickle=True)
+                else:
+                    seq_data = np.load(seq_path, allow_pickle=True)
+                    
+                print(f"[*] Loaded {len(seq_data[self.mode])} {mode} sequences from {ctg + '.npz'}")
+                
+                curLen = len(seq_data[self.mode])
+                self.seqs.append(seq_data[self.mode])
 
             # load img data
-            img_path = os.path.join(data_img_dir, ctg + '.npz')
-            if six.PY3:
-                img_data = np.load(img_path, encoding='latin1', allow_pickle=True)
-            else:
-                img_data = np.load(img_path, allow_pickle=True)
-            
-            assert (len(img_data[self.mode]) == len(seq_data[self.mode])), f'[x] Category {ctg} has {len(img_data[self.mode])} images but {len(seq_data[self.mode])} sequences.'
-            print(f"[*] Loaded {len(img_data[self.mode])} {mode} images from {ctg + '.npz'}")
-            
-            # if self.imgs is None:
-            #     self.imgs = img_data[self.mode]
-            # else:
-            #     self.imgs = np.concatenate((self.imgs, img_data[self.mode]))
-            self.imgs.append(img_data[self.mode])
+            if (data_img_dir is not None):
+                img_path = os.path.join(data_img_dir, ctg + '.npz')
+                if six.PY3:
+                    img_data = np.load(img_path, encoding='latin1', allow_pickle=True)
+                else:
+                    img_data = np.load(img_path, allow_pickle=True)
+                
+                if (curLen is not None):
+                    assert (len(img_data[self.mode]) == curLen), f'[x] Category {ctg} has {len(img_data[self.mode])} images but {len(seq_data[self.mode])} sequences.'
+                curLen = len(img_data[self.mode])
+                print(f"[*] Loaded {len(img_data[self.mode])} {mode} images from {ctg + '.npz'}")
+                
+                self.imgs.append(img_data[self.mode])
 
             # create labels
             # if self.labels is None:
             #     self.labels = i * np.ones([len(seq_data[self.mode])], dtype=np.int)
             # else:
             #     self.labels = np.concatenate([self.labels, i * np.ones([len(seq_data[self.mode])], dtype=np.int)])
-            self.labels.append(i * np.ones([len(seq_data[self.mode])], dtype=np.int))
-            
-        self.seqs = np.concatenate(self.seqs)
-        self.imgs = np.concatenate(self.imgs)
+            self.labels.append(i * np.ones([curLen], dtype=np.int))
+        
+        self.seqs = np.concatenate(self.seqs) if (data_seq_dir is not None) else None
+        self.imgs = np.concatenate(self.imgs) if (data_img_dir is not None) else None
         self.labels = np.concatenate(self.labels)
 
     def __getitem__(self, index):
         # Sequence
-        data = self.seqs[index].astype(dtype=np.double, order='A', copy=False)
-        
-        # Sequence Augmentation
-        if (not self.disable_augmentation):
-            data = self.random_scale_seq(self.seqs[index])
-        if (self.augment_stroke_prob > 0 and not self.disable_augmentation):
-            data = utils.augment_strokes(data, self.augment_stroke_prob)
+        if (self.seqs is not None):
+            data = self.seqs[index].astype(dtype=np.double, order='A', copy=False)
+            
+            # Sequence Augmentation
+            if (not self.disable_augmentation):
+                data = self.random_scale_seq(self.seqs[index])
+            if (self.augment_stroke_prob > 0 and not self.disable_augmentation):
+                data = utils.augment_strokes(data, self.augment_stroke_prob)
 
-        strokes_3d = np.pad(data, ((0, self.paddingLength - data.shape[0]), (0, 0)), 'constant', constant_values=0)
-        strokes_5d = utils.seq_3d_to_5d(data, self.paddingLength)
+            strokes_3d = np.pad(data, ((0, self.paddingLength - data.shape[0]), (0, 0)), 'constant', constant_values=0)
+            strokes_5d = utils.seq_3d_to_5d(data, self.paddingLength)
+        else:
+            strokes_3d = 0
+            strokes_5d = 0
 
         # Image
-        data = np.copy(self.imgs[index])
-        img = np.reshape(data, [1,data.shape[0],data.shape[1]])
-        
-        # Image Augmentation
-        if (not self.disable_augmentation):
-            img = self.random_scale_img(img)
-            img = self.random_rotate_img(img)
-            img = self.random_translate_img(img)
-        # img.shape: [1, 28, 28], [C, H, W]
+        if (self.imgs is not None):
+            data = np.copy(self.imgs[index])
+            img = np.reshape(data, [1,data.shape[0],data.shape[1]])
+            # Image Augmentation
+            if (not self.disable_augmentation):
+                img = self.random_scale_img(img)
+                img = self.random_rotate_img(img)
+                img = self.random_translate_img(img)
+        else:
+            img = 0
         
         # Label Augmentation
         label = self.labels[index]
