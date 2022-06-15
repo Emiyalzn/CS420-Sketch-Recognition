@@ -33,7 +33,6 @@ class SketchR2CNNTrain(BaseTrain):
         
         arg_parser.add_argument('--data_seq_dir', type=str, default=None)
         arg_parser.add_argument('--data_img_dir', type=str, default=None)
-        arg_parser.add_argument('--categories', type=ast.literal_eval, default="['bear', 'cat', 'crocodile', 'elephant', 'giraffe', 'horse', 'lion', 'owl', 'penguin', 'raccoon', 'sheep', 'tiger', 'zebra', 'camel', 'cow', 'dog', 'flamingo', 'hedgehog', 'kangaroo', 'monkey', 'panda', 'pig', 'rhinoceros', 'squirrel', 'whale']")
         
         arg_parser.add_argument('--paddingLength', type=int, default=226)
         arg_parser.add_argument('--random_scale_factor', type=float, default=0.0)
