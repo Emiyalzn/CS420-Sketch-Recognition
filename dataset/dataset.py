@@ -195,7 +195,6 @@ def r2cnn_collate(batch):
         batch_collate[k] = torch.from_numpy(sorted_arr)
     return batch_collate
 
-
 #! paddingLength is 226 in default. 
 #! But it is recommended to manually set @property `paddingLength`
 #! after obtaining maxSeqLen of train, valid and test sets.
@@ -319,12 +318,13 @@ class SketchDataset(Dataset):
                 img = self.random_scale_img(img)
                 img = self.random_rotate_img(img)
                 img = self.random_translate_img(img)
+            img = img.astype(dtype=np.float32, order='A', copy=False) / 255.0
         else:
             img = 0
         
         # Label Augmentation
         label = self.labels[index]
-        return strokes_3d, strokes_5d, length, img.astype(dtype=np.float32, order='A', copy=False) / 255.0, label
+        return strokes_3d, strokes_5d, length, img, label
         
         # data = np.copy(self.imgs[index])
         # img = np.reshape(data, [1,data.shape[0],data.shape[1]]).astype(dtype=np.float32) / 255.0

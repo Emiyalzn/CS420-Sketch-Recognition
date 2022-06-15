@@ -31,9 +31,6 @@ class SketchR2CNNTrain(BaseTrain):
         # Otherwise the first conv layer should be reconstructed.
         arg_parser.add_argument('--model_fn', type=str, default='resnet50')
         
-        arg_parser.add_argument('--data_seq_dir', type=str, default=None)
-        arg_parser.add_argument('--data_img_dir', type=str, default=None)
-        
         arg_parser.add_argument('--paddingLength', type=int, default=226)
         arg_parser.add_argument('--random_scale_factor', type=float, default=0.0)
         arg_parser.add_argument('--augment_stroke_prob', type=float, default=0.0)

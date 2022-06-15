@@ -42,7 +42,7 @@ class BiLSTM(torch.nn.Module):
             points = points[:, :, :self.input_size]
 
         # use PackedSequence to speed up training
-        points_packed = pack_padded_sequence(points, lengths, batch_first=self.batch_first)
+        points_packed = pack_padded_sequence(points, lengths, batch_first=self.batch_first, enforce_sorted=False)
         _, (last_hidden, _) = self.rnn(points_packed)
 
         last_hidden = last_hidden.view(batch_size, -1)

@@ -32,7 +32,7 @@ def augment_strokes(strokes, prob=0.0):
 
 def seq_3d_to_5d(stroke, max_len=250):
     """ Convert from 3D format (npz file) to 5D (sketch-rnn paper) """
-    result = np.zeros((max_len, 5), dtype=float)
+    result = np.zeros((max_len, 5), dtype=np.float32)
     l = len(stroke)
     assert l <= max_len
     result[0:l, 0:2] = stroke[:, 0:2]
