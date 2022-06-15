@@ -86,6 +86,9 @@ class R2CNNDataset(Dataset):
         self.augment_stroke_prob = augment_stroke_prob
         self.disable_augmentation = disable_augmentation
         
+        if (self.disable_augmentation):
+            print(f"Data augmentation is disabled.")
+        
         self.seqs = list()
         self.labels = list()
 
@@ -156,6 +159,9 @@ class R2CNNDataset(Dataset):
         for seq in self.seqs:
             maxLen = max(maxLen, len(seq))
         return maxLen
+
+    def dispose(self):
+        pass
 
 
 def r2cnn_collate(batch):
@@ -232,6 +238,9 @@ class SketchDataset(Dataset):
         self.img_rotate_angle = img_rotate_angle
         self.img_translate_dist = img_translate_dist
         self.disable_augmentation = disable_augmentation
+        
+        if (self.disable_augmentation):
+            print(f"Data augmentation is disabled.")
         
         # self.seqs = None
         # self.imgs = None
@@ -387,3 +396,6 @@ class SketchDataset(Dataset):
     @paddingLength.setter
     def paddingLength(self, newPaddingLength):
         self._paddingLength = newPaddingLength
+
+    def dispose(self):
+        pass

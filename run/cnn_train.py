@@ -109,6 +109,7 @@ class SketchCNNTrain(BaseTrain):
                 img_scale_ratio=self.config['img_scale_ratio'],
                 img_rotate_angle=self.config['img_rotate_angle'],
                 img_translate_dist=self.config['img_translate_dist'],
+                disable_augmentation=self.config['disable_augmentation']
             ) for m in self.modes
         }
         self.prepare_dataset(train_data)
@@ -179,4 +180,3 @@ class SketchCNNTrain(BaseTrain):
 
         for m in self.modes:
             train_data[m].dispose()
-
