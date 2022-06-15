@@ -20,8 +20,14 @@ class SketchRNNTrain(BaseTrain):
         super(SketchRNNTrain, self).__init__(local_dir, args)
 
     def add_args(self, arg_parser):
-        arg_parser.add_argument('--data_seq_dir', type=str, default=None)
         arg_parser.add_argument('--paddingLength', type=int, default=226)
+
+        # augmentation
+        arg_parser.add_argument('--random_scale_factor', type=float, default=0.0)
+        arg_parser.add_argument('--augment_stroke_prob', type=float, default=0.0)
+        arg_parser.add_argument('--img_scale_ratio', type=float, default=1.0)
+        arg_parser.add_argument('--img_rotate_angle', type=float, default=0.0)
+        arg_parser.add_argument('--img_translate_dist', type=float, default=0.0)
 
         arg_parser.add_argument('--disable_augmentation', action='store_true')
         return arg_parser
@@ -44,9 +50,9 @@ class SketchRNNTrain(BaseTrain):
 
     def forward_batch(self, model, data_batch, mode, optimizer, criterion):
         is_train = mode == 'train'
-        points = data_batch[1].to(self.device)
-        lengths = data_batch[2].to(self.device)
-        categories = data_batch[4].to(self.device)
+        points = data_batch[1].to(self.device).contiguous()
+        lengths = data_batch[2].contiguous()
+        categories = data_batch[4].to(self.device).contiguous()
 
         if is_train:
             optimizer.zero_grad()

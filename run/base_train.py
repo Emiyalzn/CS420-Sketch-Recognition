@@ -50,7 +50,11 @@ class BaseTrain(object):
         arg_parser.add_argument('--num_epoch', type=int, default=20)
         arg_parser.add_argument('--valid_freq', type=int, default=1)
         arg_parser.add_argument('--categories', type=ast.literal_eval, default="['bear', 'cat', 'crocodile', 'elephant', 'giraffe', 'horse', 'lion', 'owl', 'penguin', 'raccoon', 'sheep', 'tiger', 'zebra', 'camel', 'cow', 'dog', 'flamingo', 'hedgehog', 'kangaroo', 'monkey', 'panda', 'pig', 'rhinoceros', 'squirrel', 'whale']")
-        
+
+        # for dataset
+        arg_parser.add_argument('--data_seq_dir', type=str, default=None)
+        arg_parser.add_argument('--data_img_dir', type=str, default=None)
+
         # Added for compatibility
         arg_parser.add_argument('--ckpt_nets', nargs='*')
         arg_parser.add_argument('--ckpt_prefix', type=str, default=None)
