@@ -302,9 +302,11 @@ class SketchDataset(Dataset):
             if (self.augment_stroke_prob > 0 and not self.disable_augmentation):
                 data = utils.augment_strokes(data, self.augment_stroke_prob)
 
+            length = data.shape[0]
             strokes_3d = np.pad(data, ((0, self.paddingLength - data.shape[0]), (0, 0)), 'constant', constant_values=0)
             strokes_5d = utils.seq_3d_to_5d(data, self.paddingLength)
         else:
+            length = 0
             strokes_3d = 0
             strokes_5d = 0
 
@@ -322,7 +324,7 @@ class SketchDataset(Dataset):
         
         # Label Augmentation
         label = self.labels[index]
-        return strokes_3d, strokes_5d, img.astype(dtype=np.float32, order='A', copy=False) / 255.0, label
+        return strokes_3d, strokes_5d, length, img.astype(dtype=np.float32, order='A', copy=False) / 255.0, label
         
         # data = np.copy(self.imgs[index])
         # img = np.reshape(data, [1,data.shape[0],data.shape[1]]).astype(dtype=np.float32) / 255.0
