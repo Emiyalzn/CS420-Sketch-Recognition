@@ -211,5 +211,6 @@ CNN_MODELS = {
 CNN_IMAGE_SIZES = {
     'densenet161': 224,
     'resnet50': 224,
+    'efficientnet_b0': 224,
     'sketchanet': 225,
 }

@@ -24,7 +24,7 @@ from .base_train import BaseTrain
 
 class SketchCNNTrain(BaseTrain):
     def __init__(self, args=None):
-        local_dir = os.path.join("../results", f'cnn-{datetime.now().strftime("%Y%m%d-%H%M")}')
+        local_dir = os.path.join("results", f'cnn-{datetime.now().strftime("%Y%m%d-%H%M")}')
         super(SketchCNNTrain, self).__init__(local_dir, args)
         
         self.transform = transforms.Compose([
