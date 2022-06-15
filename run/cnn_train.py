@@ -74,8 +74,8 @@ class SketchCNNTrain(BaseTrain):
         # strokes_3d, strokes_5d, img.astype(dtype=np.float32, order='A', copy=False) / 255.0, label
         # sequences_3d = data_batch[0].to(self.device)
         # sequences_5d = data_batch[1].to(self.device)
-        images = self.transform(data_batch[2].repeat([1, 3, 1, 1]).contiguous()).to(self.device)
-        categories = data_batch[3].to(self.device)
+        images = self.transform(data_batch[3].repeat([1, 3, 1, 1]).contiguous()).to(self.device)
+        categories = data_batch[4].to(self.device)
 
         if is_train:
             optimizer.zero_grad()
