@@ -171,7 +171,7 @@ class SketchR2CNNTrain(BaseTrain):
                 epoch_acc = float(running_corrects) / float(num_samples)
                 self.logger.info(f"{mode} acc: {epoch_acc:.4f}")
 
-                if not is_train:
+                if mode == 'valid':
                     if epoch_acc > best_acc:
                         self.logger.info("New best valid acc, save model to disk.")
                         best_acc = epoch_acc

@@ -17,8 +17,6 @@ import ast
 from dataset.dataset import SketchDataset
 from models.cnnmodels import CNN_MODELS, CNN_IMAGE_SIZES
 from models.sketch_cnn import SketchCNN
-from utils.logger import Logger
-from utils.utils import args_print, fix_seed
 
 from .base_train import BaseTrain
 
@@ -39,8 +37,7 @@ class SketchCNNTrain(BaseTrain):
         
         arg_parser.add_argument('--data_seq_dir', type=str, default=None)
         arg_parser.add_argument('--data_img_dir', type=str, default=None)
-        arg_parser.add_argument('--categories', type=ast.literal_eval, default="['bear', 'cat', 'crocodile', 'elephant', 'giraffe', 'horse', 'lion', 'owl', 'penguin', 'raccoon', 'sheep', 'tiger', 'zebra', 'camel', 'cow', 'dog', 'flamingo', 'hedgehog', 'kangaroo', 'monkey', 'panda', 'pig', 'rhinoceros', 'squirrel', 'whale']")
-        
+
         arg_parser.add_argument('--paddingLength', type=int, default=226)
         arg_parser.add_argument('--random_scale_factor', type=float, default=0.0)
         arg_parser.add_argument('--augment_stroke_prob', type=float, default=0.0)
@@ -142,7 +139,7 @@ class SketchCNNTrain(BaseTrain):
                 is_train = mode == 'train'
                 if not is_train and epoch % valid_freq != 0:
                     continue
-                self.logger.info(f"Starting {mode} mode.")
+                self.logger.info(f"Start {mode} mode.")
 
                 if is_train:
                     if lr_exp_scheduler is not None:
@@ -170,7 +167,7 @@ class SketchCNNTrain(BaseTrain):
                 epoch_acc = float(running_corrects) / float(num_samples)
                 self.logger.info(f"{mode} acc: {epoch_acc:.4f}")
 
-                if not is_train:
+                if mode == 'valid':
                     if epoch_acc > best_acc:
                         self.logger.info("New best valid acc, save model to disk.")
                         best_acc = epoch_acc

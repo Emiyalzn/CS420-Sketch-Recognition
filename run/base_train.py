@@ -11,6 +11,7 @@ import torchvision
 import tqdm
 from torch.utils.data import DataLoader
 from torch.optim import lr_scheduler
+import ast
 
 from dataset.dataset import R2CNNDataset, r2cnn_collate
 from utils.logger import Logger
@@ -48,6 +49,7 @@ class BaseTrain(object):
         arg_parser.add_argument('--seed', type=int, default=42)
         arg_parser.add_argument('--num_epoch', type=int, default=20)
         arg_parser.add_argument('--valid_freq', type=int, default=1)
+        arg_parser.add_argument('--categories', type=ast.literal_eval, default="['bear', 'cat', 'crocodile', 'elephant', 'giraffe', 'horse', 'lion', 'owl', 'penguin', 'raccoon', 'sheep', 'tiger', 'zebra', 'camel', 'cow', 'dog', 'flamingo', 'hedgehog', 'kangaroo', 'monkey', 'panda', 'pig', 'rhinoceros', 'squirrel', 'whale']")
         
         # Added for compatibility
         arg_parser.add_argument('--ckpt_nets', nargs='*')
