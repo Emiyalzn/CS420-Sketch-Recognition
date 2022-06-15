@@ -99,7 +99,7 @@ def train_data_collate(batch):
     return batch_collate
 
 
-#! paddingLength is 150 in default. 
+#! paddingLength is 226 in default. 
 #! But it is recommended to manually set @property `paddingLength`
 #! after obtaining maxSeqLen of train, valid and test sets.
 class SketchDataset(Dataset):
@@ -116,6 +116,7 @@ class SketchDataset(Dataset):
                  img_scale_ratio: float=1.0,        # min randomly scaled ratio (for sequences) [0, 1]
                  img_rotate_angle: float=0.0,       # max randomly rotate angle (for images) (in absolute value, degree)
                  img_translate_dist: float=0.0,     # max randomly translate distance (for images) (in absolute value, pixel)
+                 disable_augmentation: bool=False   #! Whether to disable all augmentations
                  ):
         super(SketchDataset, self).__init__()
         
@@ -129,10 +130,11 @@ class SketchDataset(Dataset):
         self.img_scale_ratio = img_scale_ratio
         self.img_rotate_angle = img_rotate_angle
         self.img_translate_dist = img_translate_dist
+        self.disable_augmentation = disable_augmentation
         
-        self.seqs = None
-        self.imgs = None
-        self.labels = None
+        # self.seqs = None
+        # self.imgs = None
+        # self.labels = None
         
         # self.transform = transforms.Compose([
         #     transforms.RandomResizedCrop(224, scale=(img_scale_ratio, 1)),  #* including scaling and translation.
@@ -142,6 +144,10 @@ class SketchDataset(Dataset):
         #     transforms.Normalize(mean=[0.485, 0.456, 0.406],    #* All pre-trained models expect input images normalized in the same way
         #                          std=[0.229, 0.224, 0.225])
         # ])
+
+        self.seqs = list()
+        self.imgs = list()
+        self.labels = list()
 
         for i, ctg in enumerate(categories):
             # load sequence data
@@ -153,10 +159,11 @@ class SketchDataset(Dataset):
                 
             print(f"[*] Loaded {len(seq_data[self.mode])} {mode} sequences from {ctg + '.npz'}")
             
-            if self.seqs is None:
-                self.seqs = seq_data[self.mode]
-            else:
-                self.seqs = np.concatenate((self.seqs, seq_data[self.mode]))
+            # if self.seqs is None:
+            #     self.seqs = seq_data[self.mode]
+            # else:
+            #     self.seqs = np.concatenate((self.seqs, seq_data[self.mode]))
+            self.seqs.append(seq_data[self.mode])
 
             # load img data
             img_path = os.path.join(data_img_dir, ctg + '.npz')
@@ -166,35 +173,53 @@ class SketchDataset(Dataset):
                 img_data = np.load(img_path, allow_pickle=True)
             
             assert (len(img_data[self.mode]) == len(seq_data[self.mode])), f'[x] Category {ctg} has {len(img_data[self.mode])} images but {len(seq_data[self.mode])} sequences.'
-            print(f"[*] Loaded {len(seq_data[self.mode])} {mode} images from {ctg + '.npz'}")
+            print(f"[*] Loaded {len(img_data[self.mode])} {mode} images from {ctg + '.npz'}")
             
-            if self.imgs is None:
-                self.imgs = img_data[self.mode]
-            else:
-                self.imgs = np.concatenate((self.imgs, img_data[self.mode]))
+            # if self.imgs is None:
+            #     self.imgs = img_data[self.mode]
+            # else:
+            #     self.imgs = np.concatenate((self.imgs, img_data[self.mode]))
+            self.imgs.append(img_data[self.mode])
 
             # create labels
-            if self.labels is None:
-                self.labels = i * np.ones([len(seq_data[self.mode])], dtype=np.int)
-            else:
-                self.labels = np.concatenate([self.labels, i * np.ones([len(seq_data[self.mode])], dtype=np.int)])
+            # if self.labels is None:
+            #     self.labels = i * np.ones([len(seq_data[self.mode])], dtype=np.int)
+            # else:
+            #     self.labels = np.concatenate([self.labels, i * np.ones([len(seq_data[self.mode])], dtype=np.int)])
+            self.labels.append(i * np.ones([len(seq_data[self.mode])], dtype=np.int))
+            
+        self.seqs = np.concatenate(self.seqs)
+        self.imgs = np.concatenate(self.imgs)
+        self.labels = np.concatenate(self.labels)
 
 
     def __getitem__(self, index):
-        data = self.random_scale_seq(self.seqs[index])
-        if self.augment_stroke_prob > 0:
+        # Sequence
+        data = self.seqs[index].astype(dtype=np.double, order='A', copy=False)
+        
+        # Sequence Augmentation
+        if (not self.disable_augmentation):
+            data = self.random_scale_seq(self.seqs[index])
+        if (self.augment_stroke_prob > 0 and not self.disable_augmentation):
             data = utils.augment_strokes(data, self.augment_stroke_prob)
-        strokes_3d = data
-        strokes_5d = utils.seq_3d_to_5d(strokes_3d,self.paddingLength)
 
+        strokes_3d = np.pad(data, ((0, self.paddingLength - data.shape[0]), (0, 0)), 'constant', constant_values=0)
+        strokes_5d = utils.seq_3d_to_5d(data, self.paddingLength)
+
+        # Image
         data = np.copy(self.imgs[index])
         img = np.reshape(data, [1,data.shape[0],data.shape[1]])
-        img = self.random_scale_img(img)
-        img = self.random_rotate_img(img)
-        img = self.random_translate_img(img)
+        
+        # Image Augmentation
+        if (not self.disable_augmentation):
+            img = self.random_scale_img(img)
+            img = self.random_rotate_img(img)
+            img = self.random_translate_img(img)
         # img.shape: [1, 28, 28], [C, H, W]
+        
+        # Label Augmentation
         label = self.labels[index]
-        return strokes_5d, img.astype(dtype=np.float32, order='A', copy=False) / 255.0, label
+        return strokes_3d, strokes_5d, img.astype(dtype=np.float32, order='A', copy=False) / 255.0, label
         
         # data = np.copy(self.imgs[index])
         # img = np.reshape(data, [1,data.shape[0],data.shape[1]]).astype(dtype=np.float32) / 255.0
@@ -215,7 +240,7 @@ class SketchDataset(Dataset):
         """ Augment data by stretching x and y axis randomly [1-e, 1+e] """
         x_scale_factor = (np.random.random() - 0.5) * 2 * self.random_scale_factor + 1.0
         y_scale_factor = (np.random.random() - 0.5) * 2 * self.random_scale_factor + 1.0
-        result = data.astype(dtype=np.double, order='A', copy=True)
+        result = data.astype(dtype=np.double, order='A', copy=False)
         result[:, 0] *= x_scale_factor
         result[:, 1] *= y_scale_factor
         return result
@@ -257,13 +282,7 @@ class SketchDataset(Dataset):
     
     def num_categories(self):
         return len(self.categories)
-    
-    
-    def dispose(self):
-        del self.seqs
-        del self.imgs
-        del self.labels
-    
+
     
     @property
     def maxSeqLen(self):

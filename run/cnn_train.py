@@ -47,6 +47,8 @@ class SketchCNNTrain(BaseTrain):
         arg_parser.add_argument('--img_scale_ratio', type=float, default=1.0)
         arg_parser.add_argument('--img_rotate_angle', type=float, default=0.0)
         arg_parser.add_argument('--img_translate_dist', type=float, default=0.0)
+        
+        arg_parser.add_argument('--disable_augmentation', action='store_true')
         return arg_parser
 
     def create_data_loaders(self, dataset_dict):
@@ -71,9 +73,12 @@ class SketchCNNTrain(BaseTrain):
         is_train = mode == 'train'
         # import pdb; pdb.set_trace()
 
-        # sequences = data_batch[0].to(self.device)
-        images = self.transform(data_batch[1].repeat([1, 3, 1, 1]).contiguous()).to(self.device)
-        categories = data_batch[2].to(self.device)
+        # print([v.shape for v in data_batch])
+        # strokes_3d, strokes_5d, img.astype(dtype=np.float32, order='A', copy=False) / 255.0, label
+        # sequences_3d = data_batch[0].to(self.device)
+        # sequences_5d = data_batch[1].to(self.device)
+        images = self.transform(data_batch[2].repeat([1, 3, 1, 1]).contiguous()).to(self.device)
+        categories = data_batch[3].to(self.device)
 
         if is_train:
             optimizer.zero_grad()
