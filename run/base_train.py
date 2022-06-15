@@ -46,7 +46,7 @@ class BaseTrain(object):
         arg_parser.add_argument('--lr', type=float, default=0.0001)
         arg_parser.add_argument('--weight_decay', type=float, default=-1)
         arg_parser.add_argument('--seed', type=int, default=42)
-        arg_parser.add_argument('--num_epoch', type=int, default=1)
+        arg_parser.add_argument('--num_epoch', type=int, default=20)
         arg_parser.add_argument('--valid_freq', type=int, default=1)
         
         # Added for compatibility

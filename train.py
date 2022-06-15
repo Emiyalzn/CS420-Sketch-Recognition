@@ -6,12 +6,17 @@ if __name__ == '__main__':
     args = [
         '--model_fn', 'efficientnet_b0',
         
-        '--data_seq_dir', '/home/purewhite/workspace/cs420/project/data/dataset_raw',
-        '--data_img_dir', '/home/purewhite/workspace/cs420/project/data/dataset_processed_28',
-        '--categories', str(['bear', 'cat']),
+        '--data_seq_dir', '~/cs420/dataset/data/dataset_raw',
+        '--data_img_dir', '~/cs420/dataset/data/dataset_processed_224',
+        '--categories', str(['dog', 'bear', 'kangaroo', 'whale', 'crocodile', 
+                             'rhinoceros', 'penguin', 'camel', 'flamingo', 'giraffe', 
+                             'pig', 'cat', 'cow', 'panda', 'lion', 
+                             'tiger', 'raccoon', 'monkey', 'hedgehog', 'zebra', 
+                             'horse', 'owl', 'elephant', 'squirrel', 'sheep']),
         
-        '--batch_size', str(8),
-        '--num_epoch', str(2)
+        '--batch_size', str(64),
+        '--num_epoch', str(20),
+        '--seed', str(42),
     ]
     
     with SketchCNNTrain(args) as app:
