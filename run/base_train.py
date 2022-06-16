@@ -46,7 +46,7 @@ class BaseTrain(object):
         arg_parser.add_argument('--lr_step', type=int, default=-1)
         arg_parser.add_argument('--lr', type=float, default=0.0001)
         arg_parser.add_argument('--weight_decay', type=float, default=-1)
-        arg_parser.add_argument('--seed', type=int, default=42)
+        arg_parser.add_argument('--seed', nargs='?', default='[42,43,44]', help='random seed')
         arg_parser.add_argument('--num_epoch', type=int, default=20)
         arg_parser.add_argument('--valid_freq', type=int, default=1)
         arg_parser.add_argument('--categories', type=ast.literal_eval, default="['bear', 'cat', 'crocodile', 'elephant', 'giraffe', 'horse', 'lion', 'owl', 'penguin', 'raccoon', 'sheep', 'tiger', 'zebra', 'camel', 'cow', 'dog', 'flamingo', 'hedgehog', 'kangaroo', 'monkey', 'panda', 'pig', 'rhinoceros', 'squirrel', 'whale']")
@@ -64,8 +64,9 @@ class BaseTrain(object):
         config = vars(arg_parser.parse_args(args))
 
         if config['seed'] is None:
-            config['seed'] = random.randint(0, 2 ** 31 - 1)
-        fix_seed(config['seed'])
+            config['seed'] = [random.randint(0, 2 ** 31 - 1)]
+        else:
+            config['seed'] = eval(config['seed'])
 
         return config
 
