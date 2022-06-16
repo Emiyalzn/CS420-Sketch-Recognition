@@ -8,7 +8,7 @@ from torch.optim import lr_scheduler
 from datetime import datetime
 import ast
 
-from dataset.dataset import SketchDataset
+from dataset.dataset import SketchDataset, QuickDrawDataset, r2cnn_collate
 from models.rnnmodels import BiLSTM
 from models.sketch_rnn import SketchRNN
 
@@ -39,6 +39,7 @@ class SketchRNNTrain(BaseTrain):
                           num_workers=3 if m == 'train' else 1,
                           shuffle=True if m == 'train' else False,
                           drop_last=True,
+                          collate_fn=r2cnn_collate,
                           pin_memory=True) for m in self.modes
         }
         return data_loaders
@@ -50,14 +51,14 @@ class SketchRNNTrain(BaseTrain):
 
     def forward_batch(self, model, data_batch, mode, optimizer, criterion):
         is_train = mode == 'train'
-        points = data_batch[1].to(self.device).contiguous()
-        lengths = data_batch[2].contiguous()
-        categories = data_batch[4].to(self.device).contiguous()
+        points_offset = data_batch['points3_offset'].to(self.device).contiguous()
+        points_length = data_batch['points3_length'].contiguous()
+        categories = data_batch['category'].to(self.device).contiguous()
 
         if is_train:
             optimizer.zero_grad()
         with torch.set_grad_enabled(is_train):
-            logits = model(points, lengths)
+            logits = model(points_offset, points_length)
             loss = criterion(logits, categories)
             if is_train:
                 loss.backward()
@@ -74,18 +75,9 @@ class SketchRNNTrain(BaseTrain):
         self.config['data_img_dir'] = None # set none to avoid load figures
 
         train_data = {
-            m: SketchDataset(
-                mode=m,
-                data_seq_dir=self.config['data_seq_dir'],
-                data_img_dir=self.config['data_img_dir'],
-                categories=self.config['categories'],
-                paddingLength=self.config['paddingLength'],
-                random_scale_factor=self.config['random_scale_factor'],
-                augment_stroke_prob=self.config['augment_stroke_prob'],
-                img_scale_ratio=self.config['img_scale_ratio'],
-                img_rotate_angle=self.config['img_rotate_angle'],
-                img_translate_dist=self.config['img_translate_dist'],
-                disable_augmentation=self.config['disable_augmentation']
+            m: QuickDrawDataset(
+                m,
+                self.config['data_seq_dir']
             ) for m in self.modes
         }
         self.prepare_dataset(train_data)
