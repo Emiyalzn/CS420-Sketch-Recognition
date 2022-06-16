@@ -33,8 +33,7 @@ class SketchCNN(BaseModel):
         self.register_nets(nets, names, train_flags)
         self.to(device)
 
-    def __call__(self, seqs, images):
-        #* `seqs` is not used in this model
+    def __call__(self, images):
         cnnfeat = self.cnn(images)
         logits = self.fc(cnnfeat)
 

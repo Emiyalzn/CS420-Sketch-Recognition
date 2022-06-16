@@ -52,7 +52,7 @@ class BiLSTM(torch.nn.Module):
     def __init__(self,
                  input_size,
                  hidden_size=256,
-                 num_layers=2,
+                 num_layers=1,
                  batch_first=True,
                  bidirect=True,
                  dropout=0.1,

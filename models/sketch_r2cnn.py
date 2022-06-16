@@ -82,7 +82,7 @@ class SketchR2CNN(BaseModel):
                  intensity_channels=1,
                  train_cnn=True,
                  device=None):
-        super().__init__()
+        super(SketchR2CNN).__init__()
 
         self.img_size = img_size
         self.thickness = thickness

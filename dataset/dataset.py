@@ -260,7 +260,7 @@ class SketchDataset(Dataset):
             # load sequence data
             curLen = None
             
-            if (data_seq_dir is not None):
+            if data_seq_dir is not None:
                 seq_path = os.path.join(data_seq_dir, ctg + '.npz')
                 if six.PY3:
                     seq_data = np.load(seq_path, encoding='latin1', allow_pickle=True)
@@ -273,7 +273,7 @@ class SketchDataset(Dataset):
                 self.seqs.append(seq_data[self.mode])
 
             # load img data
-            if (data_img_dir is not None):
+            if data_img_dir is not None:
                 img_path = os.path.join(data_img_dir, ctg + '.npz')
                 if six.PY3:
                     img_data = np.load(img_path, encoding='latin1', allow_pickle=True)
