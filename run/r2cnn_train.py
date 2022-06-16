@@ -6,7 +6,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 from torch.optim import lr_scheduler
-from dataset.dataset import QuickDrawDataset, R2CNNDataset, r2cnn_collate
+from dataset.dataset import QuickDrawDataset, r2cnn_collate
 from models.cnnmodels import CNN_MODELS, CNN_IMAGE_SIZES
 from models.sketch_r2cnn import SketchR2CNN
 from neuralline.rasterize import Raster
@@ -48,6 +48,7 @@ class SketchR2CNNTrain(BaseTrain):
             m: QuickDrawDataset(
                 mode=m,
                 data_seq_dir=self.config['data_seq_dir'],
+                disable_augmentation=self.config['disable_augmentation'],
             ) for m in self.modes
         }
         return train_data

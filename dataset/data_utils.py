@@ -60,31 +60,7 @@ def transform(points, mat):
     transformed_pts = np.matmul(temp_pts, mat.T)
     return transformed_pts[:, 0:2]
 
-def augment_strokes(strokes, prob=0.0):
-    """ Perform data augmentation by randomly dropping out strokes """
-    # drop each point within a line segments with a probability of prob
-    # note that the logic in the loop prevents points at the ends to be dropped.
-    result = []
-    prev_stroke = [0, 0, 1]
-    count = 0
-    stroke = [0, 0, 1]  # Added to be safe.
-    for i in range(len(strokes)):
-        candidate = [strokes[i][0], strokes[i][1], strokes[i][2]]
-        if candidate[2] == 1 or prev_stroke[2] == 1:
-            count = 0
-        else:
-            count += 1
-        urnd = np.random.rand()  # uniform random variable
-        if candidate[2] == 0 and prev_stroke[2] == 0 and count > 2 and urnd < prob:
-            stroke[0] += candidate[0]
-            stroke[1] += candidate[1]
-        else:
-            stroke = list(candidate)
-            prev_stroke = list(stroke)
-            result.append(stroke)
-    return np.array(result)
-
-def random_remove_strokes(strokes, prob=0.0):
+def random_remove_strokes(strokes, prob=0.2):
     result = []
     for i in range(len(strokes)):
         stroke = [strokes[i][0], strokes[i][1], strokes[i][2]]

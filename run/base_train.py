@@ -13,7 +13,6 @@ from torch.utils.data import DataLoader
 from torch.optim import lr_scheduler
 import ast
 
-from dataset.dataset import R2CNNDataset, r2cnn_collate
 from utils.logger import Logger
 from utils.utils import args_print, fix_seed
 

@@ -13,7 +13,7 @@ from copy import deepcopy
 from torchvision import transforms
 
 import dataset.data_utils as utils
-from data_utils import random_affine_transform, seqlen_remove_points
+from dataset.data_utils import random_affine_transform, seqlen_remove_points
 
 class QuickDrawDataset(Dataset):
     mode_indices = {'train': 0, 'valid': 1, 'test':2}
@@ -21,7 +21,7 @@ class QuickDrawDataset(Dataset):
     def __init__(self,
                  mode,
                  data_seq_dir,
-                 disable_augmentation: bool = False
+                 disable_augmentation: bool = True
                  ):
         self.root_dir = data_seq_dir
         self.mode = mode
@@ -50,7 +50,7 @@ class QuickDrawDataset(Dataset):
         sid_points = np.array(self.data[sketch_path][()], dtype=np.float32)
 
         if not self.disable_augmentation:
-            sid_points = random_affine_transform(sid_points)
+            sid_points[:,:2] = random_affine_transform(sid_points[:,:2])
             sid_points = seqlen_remove_points(sid_points)
 
         sample = {'points3': sid_points, 'category': cid}
@@ -70,99 +70,99 @@ class QuickDrawDataset(Dataset):
         return 'QuickDraw-{}'.format(self.mode)
 
 
-class R2CNNDataset(Dataset):
-    allowedModes = {'train', 'valid', 'test'}
-    
-    def __init__(self, 
-                 mode: str,
-                 data_seq_dir: str,
-                 data_img_dir: str,                 # Dummy, unused
-                 categories: list,
-                 paddingLength: int=226,            # 226 in our dataset. For new dataset, this should be recomputed.
-                 random_scale_factor: float=0.0,    # max randomly scale ratio (for sequences) (in absolute value)
-                 augment_stroke_prob: float=0.0,    # data augmentation probability (for sequences)
-                 img_scale_ratio: float=1.0,        # Dummy, unused
-                 img_rotate_angle: float=0.0,       # Dummy, unused
-                 img_translate_dist: float=0.0,     # Dummy, unused
-                 disable_augmentation: bool=False   #! Whether to disable all augmentations
-                 ) -> None:
-        super(R2CNNDataset, self).__init__()
-        
-        assert (mode in SketchDataset.allowedModes), f"[x] mode '{mode}' is not supported."
-        
-        self.mode = mode
-        self.categories = categories
-        self._paddingLength = paddingLength
-        self.random_scale_factor = random_scale_factor
-        self.augment_stroke_prob = augment_stroke_prob
-        self.disable_augmentation = disable_augmentation
-        
-        if (self.disable_augmentation):
-            print(f"Data augmentation is disabled.")
-        
-        self.seqs = list()
-        self.labels = list()
-
-        for i, ctg in enumerate(categories):
-            # load sequence data
-            seq_path = os.path.join(data_seq_dir, 'r2cnn_' + ctg + '.npy')
-            seq_data = np.load(seq_path, encoding='latin1', allow_pickle=True).item()
-                
-            # import pdb; pdb.set_trace()
-                
-            print(f"[*] Loaded {len(seq_data[self.mode])} {self.mode} sequences from {ctg + '.npy'}")
-            
-            self.seqs.append(np.array(seq_data[self.mode], dtype=object))
-            self.labels.append(i * np.ones([len(seq_data[self.mode])], dtype=int))
-        
-        # import pdb; pdb.set_trace()
-        self.seqs = np.concatenate(self.seqs)
-        self.labels = np.concatenate(self.labels)
-
-    def __getitem__(self, index):
-        # Sequence
-        data = self.seqs[index].astype(dtype=np.double, order='A', copy=False)
-        
-        # Sequence Augmentation
-        if not self.disable_augmentation:
-            data = self.random_scale_seq(self.seqs[index])
-        if self.augment_stroke_prob > 0 and not self.disable_augmentation:
-            data = utils.augment_strokes(data, self.augment_stroke_prob)
-        
-        # Label Augmentation
-        label = self.labels[index]
-        
-        sample = {
-            'points3': data,
-            'category': label
-        }
-        
-        return sample
-    
-    def __len__(self):
-        return len(self.labels)
-    
-    def random_scale_seq(self, data):
-        """ Augment data by stretching x and y axis randomly [1-e, 1+e] """
-        x_scale_factor = (np.random.random() - 0.5) * 2 * self.random_scale_factor + 1.0
-        y_scale_factor = (np.random.random() - 0.5) * 2 * self.random_scale_factor + 1.0
-        result = data.astype(dtype=np.double, order='A', copy=False)
-        result[:, 0] *= x_scale_factor
-        result[:, 1] *= y_scale_factor
-        return result
-
-    def num_categories(self):
-        return len(self.categories)
-
-    @property
-    def maxSeqLen(self):
-        maxLen = 0
-        for seq in self.seqs:
-            maxLen = max(maxLen, len(seq))
-        return maxLen
-
-    def dispose(self):
-        pass
+# class R2CNNDataset(Dataset):
+#     allowedModes = {'train', 'valid', 'test'}
+#
+#     def __init__(self,
+#                  mode: str,
+#                  data_seq_dir: str,
+#                  data_img_dir: str,                 # Dummy, unused
+#                  categories: list,
+#                  paddingLength: int=226,            # 226 in our dataset. For new dataset, this should be recomputed.
+#                  random_scale_factor: float=0.0,    # max randomly scale ratio (for sequences) (in absolute value)
+#                  augment_stroke_prob: float=0.0,    # data augmentation probability (for sequences)
+#                  img_scale_ratio: float=1.0,        # Dummy, unused
+#                  img_rotate_angle: float=0.0,       # Dummy, unused
+#                  img_translate_dist: float=0.0,     # Dummy, unused
+#                  disable_augmentation: bool=False   #! Whether to disable all augmentations
+#                  ) -> None:
+#         super(R2CNNDataset, self).__init__()
+#
+#         assert (mode in SketchDataset.allowedModes), f"[x] mode '{mode}' is not supported."
+#
+#         self.mode = mode
+#         self.categories = categories
+#         self._paddingLength = paddingLength
+#         self.random_scale_factor = random_scale_factor
+#         self.augment_stroke_prob = augment_stroke_prob
+#         self.disable_augmentation = disable_augmentation
+#
+#         if (self.disable_augmentation):
+#             print(f"Data augmentation is disabled.")
+#
+#         self.seqs = list()
+#         self.labels = list()
+#
+#         for i, ctg in enumerate(categories):
+#             # load sequence data
+#             seq_path = os.path.join(data_seq_dir, 'r2cnn_' + ctg + '.npy')
+#             seq_data = np.load(seq_path, encoding='latin1', allow_pickle=True).item()
+#
+#             # import pdb; pdb.set_trace()
+#
+#             print(f"[*] Loaded {len(seq_data[self.mode])} {self.mode} sequences from {ctg + '.npy'}")
+#
+#             self.seqs.append(np.array(seq_data[self.mode], dtype=object))
+#             self.labels.append(i * np.ones([len(seq_data[self.mode])], dtype=int))
+#
+#         # import pdb; pdb.set_trace()
+#         self.seqs = np.concatenate(self.seqs)
+#         self.labels = np.concatenate(self.labels)
+#
+#     def __getitem__(self, index):
+#         # Sequence
+#         data = self.seqs[index].astype(dtype=np.double, order='A', copy=False)
+#
+#         # Sequence Augmentation
+#         if not self.disable_augmentation:
+#             data = self.random_scale_seq(self.seqs[index])
+#         if self.augment_stroke_prob > 0 and not self.disable_augmentation:
+#             data = utils.augment_strokes(data, self.augment_stroke_prob)
+#
+#         # Label Augmentation
+#         label = self.labels[index]
+#
+#         sample = {
+#             'points3': data,
+#             'category': label
+#         }
+#
+#         return sample
+#
+#     def __len__(self):
+#         return len(self.labels)
+#
+#     def random_scale_seq(self, data):
+#         """ Augment data by stretching x and y axis randomly [1-e, 1+e] """
+#         x_scale_factor = (np.random.random() - 0.5) * 2 * self.random_scale_factor + 1.0
+#         y_scale_factor = (np.random.random() - 0.5) * 2 * self.random_scale_factor + 1.0
+#         result = data.astype(dtype=np.double, order='A', copy=False)
+#         result[:, 0] *= x_scale_factor
+#         result[:, 1] *= y_scale_factor
+#         return result
+#
+#     def num_categories(self):
+#         return len(self.categories)
+#
+#     @property
+#     def maxSeqLen(self):
+#         maxLen = 0
+#         for seq in self.seqs:
+#             maxLen = max(maxLen, len(seq))
+#         return maxLen
+#
+#     def dispose(self):
+#         pass
 
 
 def r2cnn_collate(batch):
