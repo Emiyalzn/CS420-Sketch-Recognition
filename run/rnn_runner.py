@@ -19,7 +19,8 @@ from .base_runner import BaseRunner
 
 class SketchRNNRunner(BaseRunner):
     def __init__(self, args=None):
-        local_dir = os.path.join(f"results", f'rnn-{datetime.now().strftime("%Y%m%d-%H%M%S")}')
+        if (local_dir is None):
+            local_dir = os.path.join(f"results", f'rnn-{datetime.now().strftime("%Y%m%d-%H%M%S")}')
         super(SketchRNNRunner, self).__init__(local_dir, args)
 
     def add_args(self, arg_parser):

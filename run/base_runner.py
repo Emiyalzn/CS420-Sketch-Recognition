@@ -223,7 +223,7 @@ class BaseRunner(object):
                 self.logger.info(f"Start {mode} mode.")
                 net.eval_mode()
 
-                confusion_matrix = np.zeros((num_categories, num_categories), dtype=np.int32)
+                confusion_matrix = torch.zeros((num_categories, num_categories), dtype=torch.int)
                 running_corrects_top1 = 0
                 running_corrects_top5 = 0
                 num_samples = 0
@@ -235,7 +235,7 @@ class BaseRunner(object):
                     _, predicts = torch.max(logits, 1)
                     confusion_matrix[gt_category, predicts] += 1
                     # predicts_accu = torch.sum(predicts == gt_category)
-                    running_corrects = compute_running_corrects(predicts, gt_category, (1, 5))
+                    running_corrects = compute_running_corrects(logits, gt_category, (1, 5))
                     running_corrects_top1 += running_corrects[1]
                     running_corrects_top5 += running_corrects[5]
 
@@ -250,12 +250,12 @@ class BaseRunner(object):
                 self.logger.info(f"{mode}:\tTop1-Accuracy: {epoch_acc_1:.4f} | Top5-Accuracy: {epoch_acc_5:.4f}")
                 
                 for i, k in enumerate(self.config['categories']):
-                    TP = self.confusion_matrix[i, i]
-                    TN = np.sum(self.confusion_matrix[:i, :i]) + np.sum(self.confusion_matrix[:i, i+1:]) \
-                    + np.sum(self.confusion_matrix[i+1:, :i]) + np.sum(self.confusion_matrix[i+1:, i+1:])
+                    TP = confusion_matrix[i, i]
+                    TN = torch.sum(confusion_matrix[:i, :i]) + torch.sum(confusion_matrix[:i, i+1:]) \
+                    + torch.sum(confusion_matrix[i+1:, :i]) + torch.sum(confusion_matrix[i+1:, i+1:])
             
-                    T = np.sum(self.confusion_matrix[i])    # = TP + FN
-                    P = np.sum(self.confusion_matrix[:, i]) # = TP + FP
+                    T = torch.sum(confusion_matrix[i])    # = TP + FN
+                    P = torch.sum(confusion_matrix[:, i]) # = TP + FP
                     
                     FN = T - TP
                     FP = P - TP

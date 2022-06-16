@@ -22,8 +22,9 @@ from utils.utils import fix_seed
 from .base_runner import BaseRunner
 
 class SketchCNNRunner(BaseRunner):
-    def __init__(self, args=None):
-        local_dir = os.path.join("results", f'cnn-{datetime.now().strftime("%Y%m%d-%H%M%S")}')
+    def __init__(self, args=None, local_dir=None):
+        if (local_dir is None):
+            local_dir = os.path.join("results", f'cnn-{datetime.now().strftime("%Y%m%d-%H%M%S")}')
         super(SketchCNNRunner, self).__init__(local_dir, args)
         
         self.transform = transforms.Resize(CNN_IMAGE_SIZES[self.config['model_fn']])

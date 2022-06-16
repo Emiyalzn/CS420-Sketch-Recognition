@@ -13,7 +13,7 @@ def compute_running_corrects(output, target, topk=(1,)):
 
         res = {}
         for k in topk:
-            correct_k = correct[:k].view(-1).float().sum(0, keepdim=True).cpu().numpy()
+            correct_k = correct[:k].reshape(-1).float().sum(0, keepdim=True).cpu().numpy()
             res[k] = correct_k
         return res
 
