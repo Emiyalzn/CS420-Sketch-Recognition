@@ -25,7 +25,7 @@ class BaseRunner(object):
             self.config = self._parse_args(args)
         else:
             self.config = self._parse_args()
-        self.step_counters = {m: 0 for m in self.modes}
+        # self.step_counters = {m: 0 for m in self.modes}
         self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
         # init folder and logger
@@ -53,8 +53,8 @@ class BaseRunner(object):
         arg_parser.add_argument('--categories', type=ast.literal_eval, default="['bear', 'cat', 'crocodile', 'elephant', 'giraffe', 'horse', 'lion', 'owl', 'penguin', 'raccoon', 'sheep', 'tiger', 'zebra', 'camel', 'cow', 'dog', 'flamingo', 'hedgehog', 'kangaroo', 'monkey', 'panda', 'pig', 'rhinoceros', 'squirrel', 'whale']")
 
         # for dataset
-        arg_parser.add_argument('--data_seq_dir', type=str, default='/home/lizenan/cs420/CS420-Proj/dataset/data/dataset_raw')
-        arg_parser.add_argument('--data_img_dir', type=str, default='/home/lizenan/cs420/CS420-Proj/dataset/data/dataset_processed_28')
+        arg_parser.add_argument('--data_seq_dir', type=str, default=None)
+        arg_parser.add_argument('--data_img_dir', type=str, default=None)
 
         # Added for compatibility
         arg_parser.add_argument('--ckpt_nets', nargs='*')
@@ -148,7 +148,7 @@ class BaseRunner(object):
                     num_samples = 0
                     pbar = tqdm.tqdm(total=len(data_loaders[mode]))
                     for bid, data_batch in enumerate(data_loaders[mode]):
-                        self.step_counters[mode] += 1
+                        # self.step_counters[mode] += 1
 
                         logits, loss, gt_category = self.forward_batch(net, data_batch, mode, optimizer, criterion)
                         _, predicts = torch.max(logits, 1)
@@ -230,7 +230,7 @@ class BaseRunner(object):
                 num_samples = 0
                 pbar = tqdm.tqdm(total=len(data_loaders[mode]))
                 for bid, data_batch in enumerate(data_loaders[mode]):
-                    self.step_counters[mode] += 1
+                    # self.step_counters[mode] += 1
 
                     logits, _, gt_category = self.forward_batch(net, data_batch, mode, BaseRunner.DummyOptimizer(), lambda _1, _2: 0)
                     _, predicts = torch.max(logits, 1)
