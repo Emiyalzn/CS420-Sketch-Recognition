@@ -17,6 +17,7 @@ import ast
 from dataset.dataset import SketchDataset
 from models.cnnmodels import CNN_MODELS, CNN_IMAGE_SIZES
 from models.sketch_cnn import SketchCNN
+from utils.utils import fix_seed
 
 from .base_train import BaseTrain
 
@@ -124,58 +125,72 @@ class SketchCNNTrain(BaseTrain):
         else:
             lr_exp_scheduler = None
 
-        best_acc = 0.0
-        best_epoch = -1
-
         ckpt_prefix = self.checkpoint_prefix()
         ckpt_nets = self.config['ckpt_nets']
         if ckpt_prefix is not None:
             loaded_paths = net.load(ckpt_prefix, ckpt_nets)
             self.logger.info(f"load pretrained model from {loaded_paths}")
 
-        for epoch in range(1, num_epochs+1):
-            self.logger.info('-' * 20)
-            self.logger.info(f"Epoch {epoch}/{num_epochs}")
+        best_acc_record = {'valid':[], 'test':[]}
+        for seed in self.config['seed']:
+            self.logger.info(f"Fix seed {seed}.")
+            fix_seed(seed)
+            best_val_acc = 0.0
+            best_test_acc = 0.0
+            best_epoch = -1
 
-            for mode in self.modes:
-                is_train = mode == 'train'
-                if not is_train and epoch % valid_freq != 0:
-                    continue
-                self.logger.info(f"Start {mode} mode.")
+            for epoch in range(1, num_epochs+1):
+                self.logger.info('-' * 20)
+                self.logger.info(f"Epoch {epoch}/{num_epochs}")
 
-                if is_train:
-                    if lr_exp_scheduler is not None:
-                        lr_exp_scheduler.step()
-                    net.train_mode()
-                else:
-                    net.eval_mode()
+                for mode in self.modes:
+                    is_train = mode == 'train'
+                    if not is_train and epoch % valid_freq != 0:
+                        continue
+                    self.logger.info(f"Start {mode} mode.")
 
-                running_corrects = 0
-                num_samples = 0
-                pbar = tqdm.tqdm(total=len(data_loaders[mode]))
-                for bid, data_batch in enumerate(data_loaders[mode]):
-                    self.step_counters[mode] += 1
+                    if is_train:
+                        if lr_exp_scheduler is not None:
+                            lr_exp_scheduler.step()
+                        net.train_mode()
+                    else:
+                        net.eval_mode()
 
-                    logits, loss, gt_category = self.forward_batch(net, data_batch, mode, optimizer, criterion)
-                    _, predicts = torch.max(logits, 1)
-                    predicts_accu = torch.sum(predicts == gt_category)
-                    running_corrects += predicts_accu.item()
+                    running_corrects = 0
+                    num_samples = 0
+                    pbar = tqdm.tqdm(total=len(data_loaders[mode]))
+                    for bid, data_batch in enumerate(data_loaders[mode]):
+                        self.step_counters[mode] += 1
 
-                    sampled_batch_size = gt_category.size(0)
-                    num_samples += sampled_batch_size
+                        logits, loss, gt_category = self.forward_batch(net, data_batch, mode, optimizer, criterion)
+                        _, predicts = torch.max(logits, 1)
+                        predicts_accu = torch.sum(predicts == gt_category)
+                        running_corrects += predicts_accu.item()
 
-                    pbar.update()
-                pbar.close()
-                epoch_acc = float(running_corrects) / float(num_samples)
-                self.logger.info(f"{mode} acc: {epoch_acc:.4f}")
+                        sampled_batch_size = gt_category.size(0)
+                        num_samples += sampled_batch_size
 
-                if mode == 'valid':
-                    if epoch_acc > best_acc:
-                        self.logger.info("New best valid acc, save model to disk.")
-                        best_acc = epoch_acc
-                        best_epoch = epoch
-                        net.save(self.model_dir, 'best')
-        self.logger.info(f"Best valid acc: {best_acc:.4f}, corresponding epoch: {best_epoch}.")
+                        pbar.update()
+                    pbar.close()
+                    epoch_acc = float(running_corrects) / float(num_samples)
+                    self.logger.info(f"{mode} acc: {epoch_acc:.4f}")
+
+                    if mode == 'valid':
+                        if epoch_acc > best_val_acc:
+                            self.logger.info("New best valid acc, save model to disk.")
+                            best_val_acc = epoch_acc
+                            best_epoch = epoch
+                            net.save(self.model_dir, f'best_{seed}')
+                    if mode == 'test' and best_epoch == epoch:
+                        best_test_acc = epoch_acc
+
+            self.logger.info(f"Best valid acc: {best_val_acc:.4f}, test acc: {best_test_acc:.4f}, "
+                             f"corresponding epoch: {best_epoch}.")
+            best_acc_record['valid'].append(best_val_acc)
+            best_acc_record['test'].append(best_test_acc)
+
+        self.logger.info(f"Average valid acc: {np.mean(best_acc_record['valid']):.4f}±{np.std(best_acc_record['valid']):.4f}\n"
+                         f"Average test acc: {np.mean(best_acc_record['test']):.4f}±{np.std(best_acc_record['test']):.4f}")
 
         for m in self.modes:
             train_data[m].dispose()

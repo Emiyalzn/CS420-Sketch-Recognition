@@ -4,6 +4,7 @@ import cv2
 import random
 import math
 import numpy as np
+from copy import deepcopy
 
 def augment_strokes(strokes, prob=0.0):
     """ Perform data augmentation by randomly dropping out strokes """
@@ -29,6 +30,38 @@ def augment_strokes(strokes, prob=0.0):
             result.append(stroke)
     return np.array(result)
 
+def random_remove_strokes(strokes, prob=0.0):
+    result = []
+    for i in range(len(strokes)):
+        stroke = [strokes[i][0], strokes[i][1], strokes[i][2]]
+        if stroke[2] == 0:
+            urnd = np.random.rand()
+            if urnd < prob:
+                stroke[2] = 1
+        result.append(stroke)
+    return np.array(result)
+
+
+def seqlen_remove_strokes(strokes, drop_prob=0.0):
+    alpha = 2
+    beta = 0.5
+    length = len(strokes)
+    count = 0
+    probs = []
+    for i in range(length):
+        if strokes[i][2] == 1:
+            probs.append(0.)
+            continue
+        count += 1
+        prob = np.exp(alpha * i) / np.exp(beta * np.sqrt(strokes[i][0] ** 2 + strokes[i][1] ** 2))
+        probs.append(prob)
+    probs = np.array(probs) / np.sum(probs)
+    drop_indices = np.random.choice(np.arange(length), int(drop_prob * count), False, p=probs)
+
+    result = deepcopy(strokes)
+    for ind in drop_indices:
+        result[ind][2] = 1
+    return result
 
 def seq_3d_to_5d(stroke, max_len=250):
     """ Convert from 3D format (npz file) to 5D (sketch-rnn paper) """
