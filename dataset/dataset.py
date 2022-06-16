@@ -311,6 +311,7 @@ class SketchDataset(Dataset):
 
             length = data.shape[0]
             strokes_3d = np.pad(data, ((0, self.paddingLength - data.shape[0]), (0, 0)), 'constant', constant_values=0)
+            strokes_3d = strokes_3d.astype(dtype=np.float32, order='A', copy=False)
             strokes_5d = utils.seq_3d_to_5d(data, self.paddingLength)
         else:
             length = 0
