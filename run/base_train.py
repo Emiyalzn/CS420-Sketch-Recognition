@@ -47,6 +47,7 @@ class BaseTrain(object):
         arg_parser.add_argument('--lr', type=float, default=0.0001)
         arg_parser.add_argument('--weight_decay', type=float, default=-1)
         arg_parser.add_argument('--seed', nargs='?', default='[42,43,44]', help='random seed')
+        arg_parser.add_argument('--early_stopping', type=int, default=3)
         arg_parser.add_argument('--num_epoch', type=int, default=20)
         arg_parser.add_argument('--valid_freq', type=int, default=1)
         arg_parser.add_argument('--categories', type=ast.literal_eval, default="['bear', 'cat', 'crocodile', 'elephant', 'giraffe', 'horse', 'lion', 'owl', 'penguin', 'raccoon', 'sheep', 'tiger', 'zebra', 'camel', 'cow', 'dog', 'flamingo', 'hedgehog', 'kangaroo', 'monkey', 'panda', 'pig', 'rhinoceros', 'squirrel', 'whale']")
@@ -97,6 +98,7 @@ class BaseTrain(object):
         lr_step = self.config['lr_step']
         num_epochs = self.config['num_epoch']
         valid_freq = self.config['valid_freq']
+        early_stopping = self.config['early_stopping']
 
         train_data = self.prepare_dataset()
         num_categories = len(self.config['categories'])
@@ -124,6 +126,7 @@ class BaseTrain(object):
             best_val_acc = 0.0
             best_test_acc = 0.0
             best_epoch = -1
+            epoch_count = 0 # use for early stopping
 
             for epoch in range(1, num_epochs + 1):
                 self.logger.info('-' * 20)
@@ -167,8 +170,16 @@ class BaseTrain(object):
                             best_val_acc = epoch_acc
                             best_epoch = epoch
                             net.save(self.model_dir, f'best_{seed}')
+                            epoch_count = 0
+                        else:
+                            epoch_count += 1
+
                     if mode == 'test' and best_epoch == epoch:
                         best_test_acc = epoch_acc
+
+                # early stopping
+                if epoch_count >= early_stopping:
+                    break
 
             self.logger.info(f"Best valid acc: {best_val_acc:.4f}, test acc: {best_test_acc:.4f}, "
                              f"corresponding epoch: {best_epoch}.")

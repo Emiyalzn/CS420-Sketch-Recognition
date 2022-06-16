@@ -24,11 +24,7 @@ class SketchMate(BaseModel):
         self.cnn = cnn_fn(pretrained=False, requires_grad=train_cnn, in_channels=1)
 
         num_fc_in_features = self.cnn.num_out_features + self.rnn.num_out_features
-        self.fc = nn.Sequential(
-            nn.Linear(num_fc_in_features, 256),
-            nn.ReLU(),
-            nn.Linear(256, num_categories)
-        )
+        self.fc = nn.Linear(num_fc_in_features, num_categories)
 
         nets.extend([self.rnn, self.cnn, self.fc])
         names.extend(['rnn', 'cnn', 'fc'])
