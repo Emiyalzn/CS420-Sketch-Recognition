@@ -6,6 +6,60 @@ import math
 import numpy as np
 from copy import deepcopy
 
+def bbox(points):
+    return np.amin(points, axis=0), np.amax(points, axis=0)
+
+def rotate_mat(degree):
+    m = np.identity(3, 'float32')
+    theta_rad = degree * np.pi / 180.0
+    sin_theta = np.sin(theta_rad)
+    cos_theta = np.cos(theta_rad)
+
+    m[0, 0] = cos_theta
+    m[0, 1] = sin_theta
+    m[1, 0] = -sin_theta
+    m[1, 1] = cos_theta
+
+    return m
+
+def scale_mat(sx, sy=None):
+    if sy is None:
+        sy = sx
+
+    m = np.identity(3, 'float32')
+    m[0, 0] = sx
+    m[1, 1] = sy
+    return m
+
+def translate_mat(delta_x, delta_y):
+    m = np.identity(3, 'float32')
+    m[0, 2] = delta_x
+    m[1, 2] = delta_y
+    return m
+
+def random_affine_transform(points, scale_factor=0.2, rot_thresh=30.0):
+    bbox_min, bbox_max = bbox(points)
+    bbox_center = (bbox_min + bbox_max) / 2.0
+    x_scale_factor = 1.0 - np.random.random() * scale_factor
+    y_scale_factor = 1.0 - np.random.random() * scale_factor
+    rot_degree = (np.random.random() - 0.5) * 2 * rot_thresh
+
+    t_0 = translate_mat(-bbox_center[0], -bbox_center[1])
+    s_1 = scale_mat(x_scale_factor, y_scale_factor)
+    r_2 = rotate_mat(rot_degree)
+    t_3 = translate_mat(bbox_center[0], bbox_center[1])
+    transform_ = np.matmul(t_3, np.matmul(r_2, np.matmul(s_1, t_0)))
+
+    transformed_points = transform(points, transform_)
+    return transformed_points
+
+def transform(points, mat):
+    temp_pts = np.ones(shape=(len(points), 3), dtype='float32')
+    temp_pts[:, 0:2] = np.array(points, dtype='float32')
+
+    transformed_pts = np.matmul(temp_pts, mat.T)
+    return transformed_pts[:, 0:2]
+
 def augment_strokes(strokes, prob=0.0):
     """ Perform data augmentation by randomly dropping out strokes """
     # drop each point within a line segments with a probability of prob
@@ -41,8 +95,7 @@ def random_remove_strokes(strokes, prob=0.0):
         result.append(stroke)
     return np.array(result)
 
-
-def seqlen_remove_strokes(strokes, drop_prob=0.0):
+def seqlen_remove_strokes(strokes, drop_prob=0.2):
     alpha = 2
     beta = 0.5
     length = len(strokes)
@@ -53,12 +106,33 @@ def seqlen_remove_strokes(strokes, drop_prob=0.0):
             probs.append(0.)
             continue
         count += 1
-        prob = np.exp(alpha * i) / np.exp(beta * np.sqrt(strokes[i][0] ** 2 + strokes[i][1] ** 2))
+        prob = np.exp(alpha * count) / np.exp(beta * np.sqrt(strokes[i][0] ** 2 + strokes[i][1] ** 2))
         probs.append(prob)
     probs = np.array(probs) / np.sum(probs)
     drop_indices = np.random.choice(np.arange(length), int(drop_prob * count), False, p=probs)
 
     result = deepcopy(strokes)
+    for ind in drop_indices:
+        result[ind][2] = 1
+    return result
+
+def seqlen_remove_points(points, drop_prob=0.2):
+    alpha = 2
+    beta = 0.5
+    length = len(points)
+    count = 0
+    probs = [0.]
+    for i in range(1, length):
+        if points[i][2] == 1:
+            probs.append(0.)
+            continue
+        count += 1
+        prob = np.exp(alpha * count) / np.exp(beta * np.sqrt((points[i][0]-points[i-1][0]) ** 2 + (points[i][1]-points[i-1][1]) ** 2))
+        probs.append(prob)
+    probs = np.array(probs) / np.sum(probs)
+    drop_indices = np.random.choice(np.arange(length), int(drop_prob * count), False, p=probs)
+
+    result = deepcopy(points)
     for ind in drop_indices:
         result[ind][2] = 1
     return result

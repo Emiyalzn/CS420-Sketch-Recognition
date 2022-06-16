@@ -104,23 +104,19 @@ class BaseTrain(object):
         num_categories = len(self.config['categories'])
         self.logger.info(f"Number of categories: {num_categories}")
 
-        net = self.create_model(num_categories)
         data_loaders = self.create_data_loaders(train_data)
         criterion = nn.CrossEntropyLoss()
-        optimizer = optim.Adam(net.params_to_optimize(weight_decay, self.weight_decay_excludes()), lr)
-        if lr_step > 0:
-            lr_exp_scheduler = lr_scheduler.StepLR(optimizer, step_size=lr_step, gamma=0.5)
-        else:
-            lr_exp_scheduler = None
-
-        ckpt_prefix = self.checkpoint_prefix()
-        ckpt_nets = self.config['ckpt_nets']
-        if ckpt_prefix is not None:
-            loaded_paths = net.load(ckpt_prefix, ckpt_nets)
-            self.logger.info(f"load pretrained model from {loaded_paths}")
 
         best_acc_record = {'valid': [], 'test': []}
         for seed in self.config['seed']:
+            # initialize network
+            net = self.create_model(num_categories)
+            optimizer = optim.Adam(net.params_to_optimize(weight_decay, self.weight_decay_excludes()), lr)
+            if lr_step > 0:
+                lr_exp_scheduler = lr_scheduler.StepLR(optimizer, step_size=lr_step, gamma=0.5)
+            else:
+                lr_exp_scheduler = None
+
             self.logger.info(f"Fix seed {seed}.")
             fix_seed(seed)
             best_val_acc = 0.0

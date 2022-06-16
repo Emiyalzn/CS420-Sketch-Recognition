@@ -13,15 +13,20 @@ from copy import deepcopy
 from torchvision import transforms
 
 import dataset.data_utils as utils
-
+from data_utils import random_affine_transform, seqlen_remove_points
 
 class QuickDrawDataset(Dataset):
     mode_indices = {'train': 0, 'valid': 1, 'test':2}
 
-    def __init__(self, mode, data_seq_dir):
+    def __init__(self,
+                 mode,
+                 data_seq_dir,
+                 disable_augmentation: bool = False
+                 ):
         self.root_dir = data_seq_dir
         self.mode = mode
         self.data = None
+        self.disable_augmentation = disable_augmentation
 
         with open(osp.join(self.root_dir, 'categories.pkl'), 'rb') as fh:
             saved_pkl = pickle.load(fh)
@@ -43,6 +48,11 @@ class QuickDrawDataset(Dataset):
         sketch_path = '/sketch/{}/{}'.format(cid, sid)
 
         sid_points = np.array(self.data[sketch_path][()], dtype=np.float32)
+
+        if not self.disable_augmentation:
+            sid_points = random_affine_transform(sid_points)
+            sid_points = seqlen_remove_points(sid_points)
+
         sample = {'points3': sid_points, 'category': cid}
         return sample
 
@@ -114,9 +124,9 @@ class R2CNNDataset(Dataset):
         data = self.seqs[index].astype(dtype=np.double, order='A', copy=False)
         
         # Sequence Augmentation
-        if (not self.disable_augmentation):
+        if not self.disable_augmentation:
             data = self.random_scale_seq(self.seqs[index])
-        if (self.augment_stroke_prob > 0 and not self.disable_augmentation):
+        if self.augment_stroke_prob > 0 and not self.disable_augmentation:
             data = utils.augment_strokes(data, self.augment_stroke_prob)
         
         # Label Augmentation
@@ -236,7 +246,7 @@ class SketchDataset(Dataset):
         self.img_translate_dist = img_translate_dist
         self.disable_augmentation = disable_augmentation
         
-        if (self.disable_augmentation):
+        if self.disable_augmentation:
             print(f"Data augmentation is disabled.")
         
         # self.seqs = None
@@ -280,7 +290,7 @@ class SketchDataset(Dataset):
                 else:
                     img_data = np.load(img_path, allow_pickle=True)
                 
-                if (curLen is not None):
+                if curLen is not None:
                     assert (len(img_data[self.mode]) == curLen), f'[x] Category {ctg} has {len(img_data[self.mode])} images but {len(seq_data[self.mode])} sequences.'
                 curLen = len(img_data[self.mode])
                 print(f"[*] Loaded {len(img_data[self.mode])} {self.mode} images from {ctg + '.npz'}")
@@ -343,7 +353,6 @@ class SketchDataset(Dataset):
     def __len__(self):
         return len(self.labels)
 
-    # TODO: Should data augmentation of image be coherent with that of sequence?
     def random_scale_seq(self, data):
         """ Augment data by stretching x and y axis randomly [1-e, 1+e] """
         x_scale_factor = (np.random.random() - 0.5) * 2 * self.random_scale_factor + 1.0

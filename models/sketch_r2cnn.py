@@ -82,7 +82,7 @@ class SketchR2CNN(BaseModel):
                  intensity_channels=1,
                  train_cnn=True,
                  device=None):
-        super(SketchR2CNN).__init__()
+        super().__init__()
 
         self.img_size = img_size
         self.thickness = thickness
@@ -107,7 +107,6 @@ class SketchR2CNN(BaseModel):
         self.register_nets(nets, names, train_flags)
         self.to(device)
 
-    # TODO: Figure out what `points`, `points_offset` and `lengths` means.
     def __call__(self, points, points_offset, lengths):
         intensities, _ = self.rnn(points_offset, lengths)
 

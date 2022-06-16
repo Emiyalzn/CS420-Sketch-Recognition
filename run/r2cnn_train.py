@@ -25,7 +25,7 @@ class SketchR2CNNTrain(BaseTrain):
 
     def add_args(self, arg_parser):
         arg_parser.add_argument('--dropout', type=float, default=0.5)
-        arg_parser.add_argument('--intensity_channels', type=int, default=1)
+        arg_parser.add_argument('--intensity_channels', type=int, default=8)
         arg_parser.add_argument('--thickness', type=float, default=1.0)
         # If `intensity_channels` in {1, 3} then can convert it to 3-channel
         # and the model can remain unchanged.
