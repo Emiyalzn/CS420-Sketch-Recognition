@@ -37,4 +37,3 @@ class SketchRNN(BaseModel):
         logits = self.fc(rnnfeat)
 
         return logits
-

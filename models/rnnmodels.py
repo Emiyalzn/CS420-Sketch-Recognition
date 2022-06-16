@@ -30,6 +30,15 @@ class BiLSTM(torch.nn.Module):
         num_directs = 2 if bidirect else 1
         self.num_out_features = num_layers * num_directs * hidden_size
 
+        # Initialization
+        for name, param in self.rnn.named_parameters():
+            if 'weight_ih' in name:
+                torch.nn.init.xavier_uniform_(param.data)
+            elif 'weight_hh' in name:
+                torch.nn.init.orthogonal_(param.data)
+            elif 'bias' in name:
+                param.data.fill_(0)
+
         if not requires_grad:
             for param in self.parameters():
                 param.requires_grad = False
@@ -44,6 +53,6 @@ class BiLSTM(torch.nn.Module):
         # use PackedSequence to speed up training
         points_packed = pack_padded_sequence(points, lengths, batch_first=self.batch_first, enforce_sorted=False)
         _, (last_hidden, _) = self.rnn(points_packed)
-
+        print(last_hidden.shape)
         last_hidden = last_hidden.view(batch_size, -1)
         return last_hidden
