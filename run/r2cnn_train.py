@@ -6,7 +6,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 from torch.optim import lr_scheduler
-from dataset.dataset import R2CNNDataset, r2cnn_collate
+from dataset.dataset import QuickDrawDataset, R2CNNDataset, r2cnn_collate
 from models.cnnmodels import CNN_MODELS, CNN_IMAGE_SIZES
 from models.sketch_r2cnn import SketchR2CNN
 from neuralline.rasterize import Raster
@@ -98,19 +98,23 @@ class SketchR2CNNTrain(BaseTrain):
         self.config['data_img_dir'] = None  # set none to avoid load figures
 
         train_data = {
-            m: R2CNNDataset(
+            m: QuickDrawDataset(
                 mode=m,
                 data_seq_dir=self.config['data_seq_dir'],
-                data_img_dir=None,
-                categories=self.config['categories'],
-                paddingLength=self.config['paddingLength'],
-                random_scale_factor=self.config['random_scale_factor'],
-                augment_stroke_prob=self.config['augment_stroke_prob'],
-                img_scale_ratio=None,
-                img_rotate_angle=None,
-                img_translate_dist=None,
-                disable_augmentation=self.config['disable_augmentation']
             ) for m in self.modes
+            # m: R2CNNDataset(
+            #     mode=m,
+            #     data_seq_dir=self.config['data_seq_dir'],
+            #     data_img_dir=None,
+            #     categories=self.config['categories'],
+            #     paddingLength=self.config['paddingLength'],
+            #     random_scale_factor=self.config['random_scale_factor'],
+            #     augment_stroke_prob=self.config['augment_stroke_prob'],
+            #     img_scale_ratio=None,
+            #     img_rotate_angle=None,
+            #     img_translate_dist=None,
+            #     disable_augmentation=self.config['disable_augmentation']
+            # ) for m in self.modes
         }
         self.prepare_dataset(train_data)
         num_categories = len(self.config['categories'])
