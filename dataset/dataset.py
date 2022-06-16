@@ -9,6 +9,7 @@ import os.path as osp
 import pickle
 import cv2
 import six
+from copy import deepcopy
 from torchvision import transforms
 
 import dataset.data_utils as utils
@@ -215,7 +216,7 @@ class SketchDataset(Dataset):
                  categories: list,
                  paddingLength: int=226,            # 226 in our dataset. For new dataset, this should be recomputed.
                  random_scale_factor: float=0.0,    # max randomly scale ratio (for sequences) (in absolute value)
-                 augment_stroke_prob: float=0.0,    # data augmentation probability (for sequences)
+                 stroke_removal_prob: float=0.0,    # data augmentation probability (for sequences)
                  img_scale_ratio: float=1.0,        # min randomly scaled ratio (for sequences) [0, 1]
                  img_rotate_angle: float=0.0,       # max randomly rotate angle (for images) (in absolute value, degree)
                  img_translate_dist: float=0.0,     # max randomly translate distance (for images) (in absolute value, pixel)
@@ -229,7 +230,7 @@ class SketchDataset(Dataset):
         self.categories = categories
         self._paddingLength = paddingLength
         self.random_scale_factor = random_scale_factor
-        self.augment_stroke_prob = augment_stroke_prob
+        self.stroke_removal_prob = stroke_removal_prob
         self.img_scale_ratio = img_scale_ratio
         self.img_rotate_angle = img_rotate_angle
         self.img_translate_dist = img_translate_dist
@@ -299,14 +300,14 @@ class SketchDataset(Dataset):
 
     def __getitem__(self, index):
         # Sequence
-        if (self.seqs is not None):
+        if self.seqs is not None:
             data = self.seqs[index].astype(dtype=np.double, order='A', copy=False)
             
             # Sequence Augmentation
-            if (not self.disable_augmentation):
+            if not self.disable_augmentation:
                 data = self.random_scale_seq(self.seqs[index])
-            if (self.augment_stroke_prob > 0 and not self.disable_augmentation):
-                data = utils.augment_strokes(data, self.augment_stroke_prob)
+            if self.stroke_removal_prob > 0 and not self.disable_augmentation:
+                data = self.stroke_removal(data, self.stroke_removal_prob)
 
             length = data.shape[0]
             strokes_3d = np.pad(data, ((0, self.paddingLength - data.shape[0]), (0, 0)), 'constant', constant_values=0)
@@ -317,11 +318,11 @@ class SketchDataset(Dataset):
             strokes_5d = 0
 
         # Image
-        if (self.imgs is not None):
+        if self.imgs is not None:
             data = np.copy(self.imgs[index])
             img = np.reshape(data, [1,data.shape[0],data.shape[1]])
             # Image Augmentation
-            if (not self.disable_augmentation):
+            if not self.disable_augmentation:
                 img = self.random_scale_img(img)
                 img = self.random_rotate_img(img)
                 img = self.random_translate_img(img)
@@ -351,11 +352,24 @@ class SketchDataset(Dataset):
         result[:, 1] *= y_scale_factor
         return result
 
-    def stroke_removal(self, data):
-        pass
+    def stroke_removal(self, data, alpha=2.0, beta=0.5):
+        length = len(data)
+        count = 0
+        probs = []
+        for i in range(length):
+            if data[i][2] == 1:
+                probs.append(0.)
+                continue
+            count += 1
+            prob = np.exp(alpha * i) / np.exp(beta * np.sqrt(data[i][0] ** 2 + data[i][1] ** 2))
+            probs.append(prob)
+        probs = np.array(probs) / np.sum(probs)
+        drop_indices = np.random.choice(np.arange(length), int(self.stroke_removal_prob * count), False, p=probs)
 
-    def stroke_deform(self, data):
-        pass
+        result = deepcopy(data)
+        for ind in drop_indices:
+            result[ind][2] = 1
+        return result
 
     def random_scale_img(self, data):
         """ Randomly scale image """
