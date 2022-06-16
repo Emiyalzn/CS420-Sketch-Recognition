@@ -123,7 +123,6 @@ class BaseRunner(object):
             self.logger.info(f"Fix seed {seed}.")
             fix_seed(seed)
             best_val_acc = 0.0
-            best_test_acc = 0.0
             best_epoch = -1
             epoch_count = 0 # use for early stopping
 
@@ -180,7 +179,7 @@ class BaseRunner(object):
                 if epoch_count >= early_stopping:
                     break
 
-            self.logger.info(f"Best valid acc: {best_val_acc:.4f}, test acc: {best_test_acc:.4f}, "
+            self.logger.info(f"Best valid acc: {best_val_acc:.4f}, "
                              f"corresponding epoch: {best_epoch}.")
             best_acc_record['valid'].append(best_val_acc)
             # best_acc_record['test'].append(best_test_acc)
