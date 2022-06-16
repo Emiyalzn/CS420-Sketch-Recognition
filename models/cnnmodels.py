@@ -209,8 +209,8 @@ CNN_MODELS = {
 }
 
 CNN_IMAGE_SIZES = {
-    'densenet161': 224,
+    'densenet161': 224,     #* H and W are expected to be at least 224 for torchvision models.
     'resnet50': 224,
     'efficientnet_b0': 224,
-    'sketchanet': 224,
+    'sketchanet': 225,
 }
