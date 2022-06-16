@@ -4,8 +4,8 @@ from six.moves import xrange
 import six
 import svgwrite
 import os
-import tensorflow.compat.v1 as tf
-import svg2png
+# import tensorflow.compat.v1 as tf
+from utils import svg2png
 import glob
 from PIL import Image, ImageDraw
 import re
@@ -120,29 +120,30 @@ def sort_paths(paths):
 
 
 def main():
-    FLAGS = tf.app.flags.FLAGS
+    # FLAGS = tf.app.flags.FLAGS
 
-    # Input sequential-formed dataset directory
-    tf.app.flags.DEFINE_string(
-        'input_dir',
-        'dataset_path',
-        'The directory in which to find the original dataset.'
-    )
-    # Output pixel-formed dataset directory
-    tf.app.flags.DEFINE_string(
-        'output_dir',
-        'output_path',
-        'The directory in which to output the translated dataset.'
-    )
-    tf.app.flags.DEFINE_integer(
-        'png_width', 48,
-        'The width of the output pixel-formed sketch image.'
-    )
-    # Category to be translated
-    tf.app.flags.DEFINE_multi_string(
-        'categories', {'cat', 'pig'},
-        'The sketch category to be translated to the pixel form from the sequential form.'
-    )
+    # # Input sequential-formed dataset directory
+    # tf.app.flags.DEFINE_string(
+    #     'input_dir',
+    #     'dataset_path',
+    #     'The directory in which to find the original dataset.'
+    # )
+    # # Output pixel-formed dataset directory
+    # tf.app.flags.DEFINE_string(
+    #     'output_dir',
+    #     'output_path',
+    #     'The directory in which to output the translated dataset.'
+    # )
+    # tf.app.flags.DEFINE_integer(
+    #     'png_width', 48,
+    #     'The width of the output pixel-formed sketch image.'
+    # )
+    # # Category to be translated
+    # tf.app.flags.DEFINE_multi_string(
+    #     'categories', {'cat', 'pig'},
+    #     'The sketch category to be translated to the pixel form from the sequential form.'
+    # )
+    FLAGS = None
 
     dataset = FLAGS.categories
     in_dir = FLAGS.input_dir

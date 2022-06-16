@@ -1,7 +1,7 @@
 import numpy as np
 from torch.utils.data import DataLoader
 from dataset.dataset import SketchDataset
-from seq2png import draw_strokes
+from utils.seq2png import draw_strokes
 import cairosvg
 import wx
 
