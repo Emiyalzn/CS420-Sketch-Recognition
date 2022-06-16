@@ -41,6 +41,20 @@ def seq_3d_to_5d(stroke, max_len=250):
     result[l:, 4] = 1
     return result
 
+def seq_5d_to_3d(stroke):
+    """Convert from stroke-5 format (from sketch-rnn paper) back to stroke-3."""
+    l = 0
+    for i in range(len(stroke)):
+        if stroke[i, 4] > 0:
+            l = i
+            break
+    if l == 0:
+        l = len(stroke)
+    result = np.zeros((l, 3))
+    result[:, 0:2] = stroke[0:l, 0:2]
+    result[:, 2] = stroke[0:l, 3]
+    return result
+
 def rescale(X, ratio=0.85):
     """ Rescale the image to a smaller size """
     h, w = X.shape

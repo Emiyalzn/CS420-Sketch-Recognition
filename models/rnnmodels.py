@@ -6,11 +6,11 @@ from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence, Packed
 class BiLSTM(torch.nn.Module):
     def __init__(self,
                  input_size,
-                 hidden_size=512,
+                 hidden_size=256,
                  num_layers=2,
                  batch_first=True,
                  bidirect=True,
-                 dropout=0.,
+                 dropout=0.1,
                  requires_grad=True):
         super(BiLSTM, self).__init__()
 
