@@ -9,7 +9,7 @@ from datetime import datetime
 import ast
 
 from dataset.dataset import SketchDataset, QuickDrawDataset, r2cnn_collate
-from models.rnnmodels import BiLSTM
+from models.rnnmodels import RNN_MODELS
 from models.sketch_rnn import SketchRNN
 
 from .base_train import BaseTrain
@@ -21,6 +21,7 @@ class SketchRNNTrain(BaseTrain):
 
     def add_args(self, arg_parser):
         arg_parser.add_argument('--paddingLength', type=int, default=226)
+        arg_parser.add_argument('--model_fn', type=str, default='lstm')
 
         # augmentation
         arg_parser.add_argument('--random_scale_factor', type=float, default=0.0)
@@ -45,7 +46,9 @@ class SketchRNNTrain(BaseTrain):
         return data_loaders
 
     def create_model(self, num_categories):
-        return SketchRNN(BiLSTM,
+        model_fn = self.config['model_fn']
+
+        return SketchRNN(RNN_MODELS[model_fn],
                          num_categories,
                          device=self.device)
 
