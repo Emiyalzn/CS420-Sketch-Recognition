@@ -51,7 +51,7 @@ class SketchRNNTrain(BaseTrain):
 
     def forward_batch(self, model, data_batch, mode, optimizer, criterion):
         is_train = mode == 'train'
-        points_offset = data_batch['points3_offset'].to(self.device).contiguous()
+        points_offset = data_batch['points5_offset'].to(self.device).contiguous()
         points_length = data_batch['points3_length'].contiguous()
         categories = data_batch['category'].to(self.device).contiguous()
 

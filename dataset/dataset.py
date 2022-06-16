@@ -160,6 +160,7 @@ def r2cnn_collate(batch):
 
     points3_padded_list = list()
     points3_offset_list = list()
+    points5_offset_list = list()
     intensities_list = list()
     category_list = list()
     for item in batch:
@@ -174,6 +175,11 @@ def r2cnn_collate(batch):
         points3_offset[1:points3_length, 0:2] = points3[1:, 0:2] - points3[:points3_length - 1, 0:2]
         points3_offset_list.append(points3_offset)
 
+        points5_padded = utils.seq_3d_to_5d(points3, max_length)
+        points5_offset = np.copy(points5_padded)
+        points5_offset[1:points3_length, 0:2] = points3[1:, 0:2] - points3[:points3_length - 1, 0:2]
+        points5_offset_list.append(points5_offset)
+
         intensities = np.zeros((max_length,), np.float32)
         intensities[:points3_length] = 1.0 - np.arange(points3_length, dtype=np.float32) / float(points3_length - 1)
         intensities_list.append(intensities)
@@ -183,6 +189,7 @@ def r2cnn_collate(batch):
     batch_padded = {
         'points3': points3_padded_list,
         'points3_offset': points3_offset_list,
+        'points5_offset': points5_offset_list,
         'points3_length': length_list,
         'intensities': intensities_list,
         'category': category_list
