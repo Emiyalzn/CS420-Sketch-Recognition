@@ -62,7 +62,7 @@ class SketchRNNTrain(BaseTrain):
             loss = criterion(logits, categories)
             if is_train:
                 loss.backward()
-                nn.utils.clip_grad_value_(model.params(), 1.0) # gradient clipping
+                nn.utils.clip_grad_value_(model.params(True), 1.0) # gradient clipping
                 optimizer.step()
 
         return logits, loss, categories
