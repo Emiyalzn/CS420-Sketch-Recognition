@@ -11,7 +11,7 @@ import cv2
 import six
 from torchvision import transforms
 
-import dataset.utils as utils
+import dataset.data_utils as utils
 
 
 class QuickDrawDataset(Dataset):

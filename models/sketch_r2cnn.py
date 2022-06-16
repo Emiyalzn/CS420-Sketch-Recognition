@@ -64,7 +64,7 @@ class SeqEncoder(nn.Module):
         intensities_packed = PackedSequence(intensities_act, hiddens_packed.batch_sizes)
         intensities, _ = pad_packed_sequence(intensities_packed, batch_first=self.batch_first, total_length=num_points)
 
-        last_hidden = last_hidden.view(batch_size, -1)
+        last_hidden = last_hidden.transpose(0,1).reshape(batch_size, -1)
 
         if self.proj_last_hidden:
             last_hidden = F.relu(self.last_hidden_fc(last_hidden))
