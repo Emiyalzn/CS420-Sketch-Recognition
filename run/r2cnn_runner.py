@@ -14,14 +14,14 @@ import tqdm
 from datetime import datetime
 import numpy as np
 
-from .base_train import BaseTrain
+from .base_runner import BaseRunner
 from utils.utils import fix_seed
 
 
-class SketchR2CNNTrain(BaseTrain):
+class SketchR2CNNRunner(BaseRunner):
     def __init__(self, args=None):
         local_dir = os.path.join("results", f'sketch-r2cnn-{datetime.now().strftime("%Y%m%d-%H%M%S")}')
-        super(SketchR2CNNTrain, self).__init__(local_dir, args)
+        super(SketchR2CNNRunner, self).__init__(local_dir, args)
 
     def add_args(self, arg_parser):
         arg_parser.add_argument('--dropout', type=float, default=0.5)

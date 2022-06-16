@@ -16,14 +16,15 @@ import ast
 from utils.logger import Logger
 from utils.utils import args_print, fix_seed
 
+from utils.evaluation import compute_running_corrects
 
-class BaseTrain(object):
+
+class BaseRunner(object):
     def __init__(self, local_dir, args=None):
         if (args is not None):
             self.config = self._parse_args(args)
         else:
             self.config = self._parse_args()
-        self.modes = ['train', 'valid', 'test']
         self.step_counters = {m: 0 for m in self.modes}
         self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
@@ -91,7 +92,10 @@ class BaseTrain(object):
     def forward_batch(self, model, data_batch, mode, optimizer, criterion):
         raise NotImplementedError
 
-    def run(self):
+    def train(self):
+        # During train(), 'train', 'valid' datasets are required
+        self.modes = ['train', 'valid']
+        
         weight_decay = self.config['weight_decay']
         lr = self.config['lr']
         lr_step = self.config['lr_step']
@@ -169,8 +173,8 @@ class BaseTrain(object):
                         else:
                             epoch_count += 1
 
-                    if mode == 'test' and best_epoch == epoch:
-                        best_test_acc = epoch_acc
+                    # if mode == 'test' and best_epoch == epoch:
+                    #     best_test_acc = epoch_acc
 
                 # early stopping
                 if epoch_count >= early_stopping:
@@ -179,11 +183,91 @@ class BaseTrain(object):
             self.logger.info(f"Best valid acc: {best_val_acc:.4f}, test acc: {best_test_acc:.4f}, "
                              f"corresponding epoch: {best_epoch}.")
             best_acc_record['valid'].append(best_val_acc)
-            best_acc_record['test'].append(best_test_acc)
+            # best_acc_record['test'].append(best_test_acc)
 
         self.logger.info(
-            f"Average valid acc: {np.mean(best_acc_record['valid']):.4f}±{np.std(best_acc_record['valid']):.4f}\n"
-            f"Average test acc: {np.mean(best_acc_record['test']):.4f}±{np.std(best_acc_record['test']):.4f}")
+            f"Average valid acc: {np.mean(best_acc_record['valid']):.4f}±{np.std(best_acc_record['valid']):.4f}")
+            # f"Average test acc: {np.mean(best_acc_record['test']):.4f}±{np.std(best_acc_record['test']):.4f}")
 
         for m in self.modes:
             train_data[m].dispose()
+
+    class DummyOptimizer(object):
+        def zero_grad(self):
+            pass
+        def step(self):
+            pass
+
+    def evaluate(self):
+        # During evaluate(), 'test' datasets are required
+        self.modes = ['test']
+
+        test_data = self.prepare_dataset()
+        num_categories = len(self.config['categories'])
+        self.logger.info(f"Number of categories: {num_categories}")
+        
+        data_loaders = self.create_data_loaders(test_data)
+
+        for seed in self.config['seed']:
+            # initialize network
+            net = self.create_model(num_categories)
+            path_prefix = os.path.join(self.model_dir, f'_iter_best_{seed}')
+            net.load(path_prefix)
+
+            self.logger.info(f"Read model of seed {seed}.")
+            fix_seed(seed)
+
+            self.logger.info('-' * 20)
+
+            # self.modes = ['test']
+            for mode in self.modes:
+                self.logger.info(f"Start {mode} mode.")
+                net.eval_mode()
+
+                confusion_matrix = np.zeros((num_categories, num_categories), dtype=np.int32)
+                running_corrects_top1 = 0
+                running_corrects_top5 = 0
+                num_samples = 0
+                pbar = tqdm.tqdm(total=len(data_loaders[mode]))
+                for bid, data_batch in enumerate(data_loaders[mode]):
+                    self.step_counters[mode] += 1
+
+                    logits, _, gt_category = self.forward_batch(net, data_batch, mode, BaseRunner.DummyOptimizer(), lambda _1, _2: 0)
+                    _, predicts = torch.max(logits, 1)
+                    confusion_matrix[gt_category, predicts] += 1
+                    # predicts_accu = torch.sum(predicts == gt_category)
+                    running_corrects = compute_running_corrects(predicts, gt_category, (1, 5))
+                    running_corrects_top1 += running_corrects[1]
+                    running_corrects_top5 += running_corrects[5]
+
+                    sampled_batch_size = gt_category.size(0)
+                    num_samples += sampled_batch_size
+
+                    pbar.update()
+                pbar.close()
+
+                epoch_acc_1 = float(running_corrects_top1) / float(num_samples)
+                epoch_acc_5 = float(running_corrects_top5) / float(num_samples)
+                self.logger.info(f"{mode}:\tTop1-Accuracy: {epoch_acc_1:.4f} | Top5-Accuracy: {epoch_acc_5:.4f}")
+                
+                for i, k in enumerate(self.config['categories']):
+                    TP = self.confusion_matrix[i, i]
+                    TN = np.sum(self.confusion_matrix[:i, :i]) + np.sum(self.confusion_matrix[:i, i+1:]) \
+                    + np.sum(self.confusion_matrix[i+1:, :i]) + np.sum(self.confusion_matrix[i+1:, i+1:])
+            
+                    T = np.sum(self.confusion_matrix[i])    # = TP + FN
+                    P = np.sum(self.confusion_matrix[:, i]) # = TP + FP
+                    
+                    FN = T - TP
+                    FP = P - TP
+                    
+                    accuracy = (TP + TN) / (TP + FN + FP + TN)
+                    precision = TP / (TP + FP)
+                    recall = TP / (TP + FN)
+                    f1 = 2 * precision * recall / (precision + recall)
+                    
+                    self.logger.info(f'{mode}-{k}: Accuracy: {accuracy} | Precision: {precision} | Recall: {recall} | F1: {f1}')
+                np.save(os.path.join(self.local_dir, f"confusion_matrix_{seed}.npy"), confusion_matrix.cpu().numpy())
+
+        for m in self.modes:
+            test_data[m].dispose()

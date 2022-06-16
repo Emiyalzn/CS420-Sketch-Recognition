@@ -19,12 +19,12 @@ from models.cnnmodels import CNN_MODELS, CNN_IMAGE_SIZES
 from models.sketch_cnn import SketchCNN
 from utils.utils import fix_seed
 
-from .base_train import BaseTrain
+from .base_runner import BaseRunner
 
-class SketchCNNTrain(BaseTrain):
+class SketchCNNRunner(BaseRunner):
     def __init__(self, args=None):
         local_dir = os.path.join("results", f'cnn-{datetime.now().strftime("%Y%m%d-%H%M%S")}')
-        super(SketchCNNTrain, self).__init__(local_dir, args)
+        super(SketchCNNRunner, self).__init__(local_dir, args)
         
         self.transform = transforms.Resize(CNN_IMAGE_SIZES[self.config['model_fn']])
         if self.config['model_fn'] in ['densenet161', 'resnet50', 'efficientnet_b0']:

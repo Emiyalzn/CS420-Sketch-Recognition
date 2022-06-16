@@ -14,13 +14,13 @@ from models.rnnmodels import RNN_MODELS
 from models.sketch_rnn import SketchRNN
 from utils.utils import fix_seed
 
-from .base_train import BaseTrain
+from .base_runner import BaseRunner
 
 
-class SketchRNNTrain(BaseTrain):
+class SketchRNNRunner(BaseRunner):
     def __init__(self, args=None):
         local_dir = os.path.join(f"results", f'rnn-{datetime.now().strftime("%Y%m%d-%H%M%S")}')
-        super(SketchRNNTrain, self).__init__(local_dir, args)
+        super(SketchRNNRunner, self).__init__(local_dir, args)
 
     def add_args(self, arg_parser):
         arg_parser.add_argument('--paddingLength', type=int, default=226)

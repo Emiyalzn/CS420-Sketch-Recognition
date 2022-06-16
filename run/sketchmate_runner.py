@@ -13,13 +13,13 @@ from datetime import datetime
 from torchvision import transforms
 import numpy as np
 
-from .base_train import BaseTrain
+from .base_runner import BaseRunner
 from utils.utils import fix_seed
 
-class SketchMateTrain(BaseTrain):
+class SketchMateRunner(BaseRunner):
     def __init__(self, args=None):
         local_dir = os.path.join("results", f'sketchmate-{datetime.now().strftime("%Y%m%d-%H%M%S")}')
-        super(SketchMateTrain, self).__init__(local_dir, args)
+        super(SketchMateRunner, self).__init__(local_dir, args)
 
         self.transform = transforms.Resize(CNN_IMAGE_SIZES[self.config['cnn_fn']])
         if self.config['cnn_fn'] in ['densenet161', 'resnet50', 'efficientnet_b0']:

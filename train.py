@@ -1,26 +1,30 @@
 import warnings
-from run.cnn_train import SketchCNNTrain
-from run.r2cnn_train import SketchR2CNNTrain
-from run.rnn_train import SketchRNNTrain
-from run.sketchmate_train import SketchMateTrain
+from run.cnn_runner import SketchCNNRunner
+from run.r2cnn_runner import SketchR2CNNRunner
+from run.rnn_runner import SketchRNNRunner
+from run.sketchmate_runner import SketchMateRunner
 
 if __name__ == '__main__':
-    # with SketchCNNTrain() as app:
-    #     with warnings.catch_warnings():
-    #         warnings.simplefilter('ignore')
-    #         app.run()
-
-    with SketchR2CNNTrain() as app:
+    with SketchCNNRunner() as app:
         with warnings.catch_warnings():
             warnings.simplefilter('ignore')
-            app.run()
+            app.train()
+            app.evaluate()
 
-    # with SketchRNNTrain() as app:
+    # with SketchR2CNNRunner() as app:
     #     with warnings.catch_warnings():
     #         warnings.simplefilter('ignore')
-    #         app.run()
+    #         app.train()
+    #         app.evaluate()
 
-    # with SketchMateTrain() as app:
+    # with SketchRNNRunner() as app:
     #     with warnings.catch_warnings():
     #         warnings.simplefilter('ignore')
-    #         app.run()
+    #         app.train()
+    #         app.evaluate()
+
+    # with SketchMateRunner() as app:
+    #     with warnings.catch_warnings():
+    #         warnings.simplefilter('ignore')
+    #         app.train()
+    #         app.evaluate()
