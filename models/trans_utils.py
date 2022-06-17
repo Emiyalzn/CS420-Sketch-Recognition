@@ -71,8 +71,8 @@ def compute_reconstruction_loss(real, pred):
     tgt_locations = real[:, :, :2]
     tgt_metadata = real[:, :, 2:]
 
-    location_loss = F.mse_loss(pred_locations, tgt_locations, reduction='none')
-    metadata_loss = F.cross_entropy(pred_metadata, torch.argmax(tgt_metadata, dim=-1), reduction='none')
+    location_loss = torch.mean(F.mse_loss(pred_locations, tgt_locations, reduction='none'), dim=2)
+    metadata_loss = F.cross_entropy(pred_metadata.transpose(1,2), torch.argmax(tgt_metadata, dim=-1), reduction='none')
 
     loss_ = location_loss + metadata_loss
     mask = torch.logical_not(torch.eq(real[..., -1], 1)).to(loss_.device, dtype=loss_.dtype)

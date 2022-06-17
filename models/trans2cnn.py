@@ -167,6 +167,7 @@ class TransDecoder(nn.Module):
 
         self.embedding = nn.Linear(input_size, d_model)
         self.dec_layers = nn.ModuleList([DecoderLayer(d_model, num_heads, dff, rate) for _ in range(num_layers)])
+        self.output_layer = nn.Linear(d_model, input_size)
 
     def forward(self, x, enc_output, training, look_ahead_mask, padding_mask):
         seq_len = x.shape[1]
@@ -174,7 +175,7 @@ class TransDecoder(nn.Module):
 
         x = self.embedding(x) # (batch_size, target_seq_len, d_model)
         x *= torch.sqrt(torch.tensor(self.d_model, dtype=torch.float32))
-        x += self.pos_encoding[:, :seq_len, ...]
+        x += self.pos_encoding[:, :seq_len, ...].to(x.device)
 
         x = F.dropout(x, self.rate, training)
 
@@ -185,7 +186,7 @@ class TransDecoder(nn.Module):
             attention_weights['decoder_layer{}_block2'.format(i+1)] = block2
 
         # x.shape == (batch_size, target_seq_len, d_model)
-        return x, attention_weights
+        return self.output_layer(x), attention_weights
 
 class DenseExpander(nn.Module):
     """
@@ -240,14 +241,17 @@ class Trans2CNN(BaseModel):
         num_fc_in_features = self.cnn.num_out_features
         self.fc = nn.Linear(num_fc_in_features, num_categories)
 
-        if self.do_reconstruction:
-            self.expand_layer = DenseExpander(num_fc_in_features, max_seq_len)
-            self.decoder = TransDecoder(num_fc_in_features, num_layers, d_model, num_heads, dff,
-                                        rate=dropout)
-
         nets.extend([self.encoder, self.cnn, self.fc])
-        names.extend(['transencoder', 'conv', 'fc'])
+        names.extend(['trans_encoder', 'conv', 'fc'])
         train_flags.extend([True, train_cnn, True])
+
+        if self.do_reconstruction:
+            self.expand_layer = DenseExpander(num_fc_in_features, max_seq_len, d_model)
+            self.decoder = TransDecoder(trans_input_size, num_layers, d_model, num_heads, dff,
+                                        rate=dropout)
+            nets.extend([self.expand_layer, self.decoder])
+            names.extend(['expand_layer', 'trans_decoder'])
+            train_flags.extend([True, True])
 
         self.register_nets(nets, names, train_flags)
         self.to(device)

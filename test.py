@@ -24,3 +24,8 @@ if __name__ == '__main__':
     #     with warnings.catch_warnings():
     #         warnings.simplefilter('ignore')
     #         app.evaluate()
+    #
+    # with Trans2CNNRunner() as app:
+    #     with warnings.catch_warnings():
+    #         warnings.simplefilter('ignore')
+    #         app.train()
