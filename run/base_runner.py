@@ -177,6 +177,7 @@ class BaseRunner(object):
 
                 # early stopping
                 if epoch_count >= early_stopping:
+                    self.logger.info("Early stopping...")
                     break
 
             self.logger.info(f"Best valid acc: {best_val_acc:.4f}, "
