@@ -6,6 +6,7 @@ from datetime import datetime
 from dataset.dataset import QuickDrawDataset, r2cnn_collate
 from models.cnnmodels import CNN_MODELS, CNN_IMAGE_SIZES
 from models.trans2cnn import Trans2CNN
+from models.trans_utils import compute_reconstruction_loss
 from .base_runner import BaseRunner
 
 class Trans2CNNRunner(BaseRunner):
@@ -15,7 +16,7 @@ class Trans2CNNRunner(BaseRunner):
         super(Trans2CNNRunner, self).__init__(local_dir, args)
 
     def add_args(self, arg_parser):
-        arg_parser.add_argument('--dropout', type=float, default=0.5)
+        arg_parser.add_argument('--dropout', type=float, default=0.1)
         arg_parser.add_argument('--intensity_channels', type=int, default=8)
         arg_parser.add_argument('--thickness', type=float, default=1.0)
         arg_parser.add_argument('--model_fn', type=str, default='efficientnet_b0')
@@ -26,6 +27,7 @@ class Trans2CNNRunner(BaseRunner):
 
         # for reconstruction
         arg_parser.add_argument('--do_reconstruction', action='store_true')
+        arg_parser.add_argument('--recon_weight', type=float, default=1.0)
 
         return arg_parser
 
@@ -79,8 +81,12 @@ class Trans2CNNRunner(BaseRunner):
         if is_train:
             optimizer.zero_grad()
         with torch.set_grad_enabled(is_train):
-            logits = model(points_offset, points, is_train)
+            logits, recon_output = model(points_offset, points, is_train)
             loss = criterion(logits, category)
+            if self.config['do_reconstruction']:
+                tar_real = points_offset[:, 1:, ...]
+                recon_loss = compute_reconstruction_loss(tar_real, recon_output)
+                loss += recon_loss * self.config['recon_weight']
             if is_train:
                 loss.backward()
                 optimizer.step()

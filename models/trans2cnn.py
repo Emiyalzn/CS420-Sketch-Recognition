@@ -114,17 +114,18 @@ class TransEncoder(nn.Module):
         for enc_layer in self.enc_layers:
             x = enc_layer(x, training, mask)
 
+        # TODO: May need to mask out the last padding intensities?
         intensities = torch.sigmoid(self.attend_fc(x))
 
         return intensities # (batch_size, input_seq_len, out_channels)
 
 class DecoderLayer(nn.Module):
-    def __init__(self, input_size, d_model, num_heads, dff, rate=0.1):
+    def __init__(self, d_model, num_heads, dff, rate=0.1):
         super(DecoderLayer, self).__init__()
 
         self.rate = rate
 
-        self.mha1 = MultiHeadAttention(input_size, d_model, num_heads)
+        self.mha1 = MultiHeadAttention(d_model, d_model, num_heads)
         self.mha2 = MultiHeadAttention(d_model, d_model, num_heads)
 
         self.ffn = point_wise_feed_forward_network(d_model, dff)
@@ -150,6 +151,41 @@ class DecoderLayer(nn.Module):
         out3 = self.layernorm3(ffn_output + out2)
 
         return out3, attn_weights_block1, attn_weights_block2
+
+class TransDecoder(nn.Module):
+    def __init__(self, input_size, num_layers, d_model,
+                 num_heads, dff,
+                 maximum_position_encoding=1000,
+                 rate=0.1):
+        super(TransDecoder, self).__init__()
+
+        self.rate = rate
+        self.d_model = d_model
+        self.num_layers = num_layers
+
+        self.pos_encoding = positional_encoding(maximum_position_encoding, d_model)
+
+        self.embedding = nn.Linear(input_size, d_model)
+        self.dec_layers = nn.ModuleList([DecoderLayer(d_model, num_heads, dff, rate) for _ in range(num_layers)])
+
+    def forward(self, x, enc_output, training, look_ahead_mask, padding_mask):
+        seq_len = x.shape[1]
+        attention_weights = {}
+
+        x = self.embedding(x) # (batch_size, target_seq_len, d_model)
+        x *= torch.sqrt(torch.tensor(self.d_model, dtype=torch.float32))
+        x += self.pos_encoding[:, :seq_len, ...]
+
+        x = F.dropout(x, self.rate, training)
+
+        for i, dec_layer in enumerate(self.dec_layers):
+            x, block1, block2 = dec_layer(x, enc_output, training, look_ahead_mask, padding_mask)
+
+            attention_weights['decoder_layer{}_block1'.format(i+1)] = block1
+            attention_weights['decoder_layer{}_block2'.format(i+1)] = block2
+
+        # x.shape == (batch_size, target_seq_len, d_model)
+        return x, attention_weights
 
 class DenseExpander(nn.Module):
     """
@@ -177,19 +213,12 @@ class DenseExpander(nn.Module):
 
 class Trans2CNN(BaseModel):
     def __init__(self,
-                 cnn_fn,
-                 img_size,
-                 thickness,
-                 num_categories,
-                 trans_input_size=5,
-                 num_layers=4,
-                 d_model=128,
-                 dff=512,
-                 num_heads=8,
-                 dropout=0.1,
-                 intensity_channels=8,
-                 do_reconstruction=False,
-                 train_cnn=True,
+                 cnn_fn, img_size, thickness,
+                 num_categories, max_seq_len=226,
+                 trans_input_size=5, num_layers=4,
+                 d_model=128, dff=512, num_heads=8,
+                 dropout=0.1, intensity_channels=8,
+                 do_reconstruction=False, train_cnn=True,
                  device=None):
         super().__init__()
 
@@ -211,6 +240,11 @@ class Trans2CNN(BaseModel):
         num_fc_in_features = self.cnn.num_out_features
         self.fc = nn.Linear(num_fc_in_features, num_categories)
 
+        if self.do_reconstruction:
+            self.expand_layer = DenseExpander(num_fc_in_features, max_seq_len)
+            self.decoder = TransDecoder(num_fc_in_features, num_layers, d_model, num_heads, dff,
+                                        rate=dropout)
+
         nets.extend([self.encoder, self.cnn, self.fc])
         names.extend(['transencoder', 'conv', 'fc'])
         train_flags.extend([True, train_cnn, True])
@@ -221,7 +255,6 @@ class Trans2CNN(BaseModel):
     def __call__(self, points_offset, points, training):
         inp = tar = points_offset
         tar_inp = tar[:, :-1, ...]
-        tar_real = tar[:, 1:, ...]
 
         enc_padding_mask, combined_mask, dec_padding_mask = create_masks(inp, tar_inp)
         intensities = self.encoder(inp, training, enc_padding_mask)
@@ -230,6 +263,13 @@ class Trans2CNN(BaseModel):
         if images.size(1) == 1:
             images = images.repeat(1, 3, 1, 1)
         cnnfeat = self.cnn(images)
+
+        if self.do_reconstruction:
+            expand_embedding = self.expand_layer(cnnfeat)
+            dec_output, _ = self.decoder(tar_inp, expand_embedding, training, combined_mask, dec_padding_mask)
+        else:
+            dec_output = None
+
         logits = self.fc(cnnfeat)
 
-        return logits
+        return logits, dec_output

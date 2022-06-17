@@ -64,3 +64,18 @@ def create_masks(inp, tar):
     combined_mask = torch.maximum(dec_target_padding_mask, look_ahead_mask)
 
     return enc_padding_mask, combined_mask, dec_padding_mask
+
+def compute_reconstruction_loss(real, pred):
+    pred_locations = pred[:, :, :2]
+    pred_metadata = pred[:, :, 2:]
+    tgt_locations = real[:, :, :2]
+    tgt_metadata = real[:, :, 2:]
+
+    location_loss = F.mse_loss(pred_locations, tgt_locations, reduction='none')
+    metadata_loss = F.cross_entropy(pred_metadata, torch.argmax(tgt_metadata, dim=-1), reduction='none')
+
+    loss_ = location_loss + metadata_loss
+    mask = torch.logical_not(torch.eq(real[..., -1], 1)).to(loss_.device, dtype=loss_.dtype)
+
+    loss_ *= mask
+    return torch.mean(loss_)

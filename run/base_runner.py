@@ -94,7 +94,7 @@ class BaseRunner(object):
 
     def train(self):
         # During train(), 'train', 'valid' datasets are required
-        self.modes = ['train', 'valid']
+        self.modes = ['train', 'valid', 'test']
         
         weight_decay = self.config['weight_decay']
         lr = self.config['lr']

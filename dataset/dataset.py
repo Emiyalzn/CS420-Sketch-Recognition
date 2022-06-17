@@ -169,7 +169,7 @@ class QuickDrawDataset(Dataset):
 
 def r2cnn_collate(batch):
     length_list = [len(item['points3']) for item in batch]
-    max_length = max(length_list)
+    max_length = 226 # preset
 
     points3_padded_list = list()
     points3_offset_list = list()
