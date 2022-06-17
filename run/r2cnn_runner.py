@@ -20,7 +20,7 @@ from utils.utils import fix_seed
 
 class SketchR2CNNRunner(BaseRunner):
     def __init__(self, args=None, local_dir=None):
-        if (local_dir is None):
+        if local_dir is None:
             local_dir = os.path.join("results", f'sketch-r2cnn-{datetime.now().strftime("%Y%m%d-%H%M%S")}')
         super(SketchR2CNNRunner, self).__init__(local_dir, args)
 

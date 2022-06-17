@@ -79,7 +79,7 @@ class SketchR2CNN(BaseModel):
                  img_size,
                  thickness,
                  num_categories,
-                 intensity_channels=1,
+                 intensity_channels=8,
                  train_cnn=True,
                  device=None):
         super().__init__()

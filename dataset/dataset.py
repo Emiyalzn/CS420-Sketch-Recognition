@@ -21,11 +21,13 @@ class QuickDrawDataset(Dataset):
     def __init__(self,
                  mode,
                  data_seq_dir,
+                 stroke_removal_prob = 0.2,
                  disable_augmentation: bool = True
                  ):
         self.root_dir = data_seq_dir
         self.mode = mode
         self.data = None
+        self.stroke_removal_prob = stroke_removal_prob
         self.disable_augmentation = disable_augmentation
 
         with open(osp.join(self.root_dir, 'categories.pkl'), 'rb') as fh:
@@ -51,7 +53,7 @@ class QuickDrawDataset(Dataset):
 
         if not self.disable_augmentation:
             sid_points[:,:2] = random_affine_transform(sid_points[:,:2])
-            sid_points = seqlen_remove_points(sid_points)
+            sid_points = seqlen_remove_points(sid_points, self.stroke_removal_prob)
 
         sample = {'points3': sid_points, 'category': cid}
         return sample
