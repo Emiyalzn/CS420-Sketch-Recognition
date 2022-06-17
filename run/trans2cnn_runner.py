@@ -20,8 +20,12 @@ class Trans2CNNRunner(BaseRunner):
         arg_parser.add_argument('--thickness', type=float, default=1.0)
         arg_parser.add_argument('--model_fn', type=str, default='efficientnet_b0')
 
+        # for augmentation
         arg_parser.add_argument('--stroke_removal_prob', type=float, default=0.0)
-        arg_parser.add_argument('--disable_augmentation', action='store_false')
+        arg_parser.add_argument('--do_augmentation', action='store_true')
+
+        # for reconstruction
+        arg_parser.add_argument('--do_reconstruction', action='store_true')
 
         return arg_parser
 
@@ -31,7 +35,7 @@ class Trans2CNNRunner(BaseRunner):
                 mode=m,
                 data_seq_dir=self.config['data_seq_dir'],
                 stroke_removal_prob=self.config['stroke_removal_prob'],
-                disable_augmentation=self.config['disable_augmentation'],
+                do_augmentation=self.config['do_augmentation'],
             ) for m in self.modes
         }
         return train_data

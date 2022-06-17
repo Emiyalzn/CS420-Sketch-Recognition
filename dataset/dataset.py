@@ -22,13 +22,13 @@ class QuickDrawDataset(Dataset):
                  mode,
                  data_seq_dir,
                  stroke_removal_prob = 0.2,
-                 disable_augmentation: bool = True
+                 do_augmentation = False,
                  ):
         self.root_dir = data_seq_dir
         self.mode = mode
         self.data = None
         self.stroke_removal_prob = stroke_removal_prob
-        self.disable_augmentation = disable_augmentation
+        self.do_augmentation = do_augmentation
 
         with open(osp.join(self.root_dir, 'categories.pkl'), 'rb') as fh:
             saved_pkl = pickle.load(fh)
@@ -51,7 +51,7 @@ class QuickDrawDataset(Dataset):
 
         sid_points = np.array(self.data[sketch_path][()], dtype=np.float32)
 
-        if not self.disable_augmentation:
+        if self.do_augmentation:
             sid_points[:,:2] = random_affine_transform(sid_points[:,:2])
             sid_points = seqlen_remove_points(sid_points, self.stroke_removal_prob)
 
