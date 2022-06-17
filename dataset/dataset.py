@@ -51,7 +51,7 @@ class QuickDrawDataset(Dataset):
 
         sid_points = np.array(self.data[sketch_path][()], dtype=np.float32)
 
-        if self.do_augmentation:
+        if self.do_augmentation and self.mode == 'train':
             sid_points[:,:2] = random_affine_transform(sid_points[:,:2])
             sid_points = seqlen_remove_points(sid_points, self.stroke_removal_prob)
 
@@ -316,10 +316,10 @@ class SketchDataset(Dataset):
             data = self.seqs[index].astype(dtype=np.double, order='A', copy=False)
             
             # Sequence Augmentation
-            if not self.disable_augmentation:
+            if not self.disable_augmentation and self.mode == 'train':
                 data = self.random_scale_seq(self.seqs[index])
-            if self.stroke_removal_prob > 0 and not self.disable_augmentation:
-                data = self.stroke_removal(data, self.stroke_removal_prob)
+                if self.stroke_removal_prob > 0:
+                    data = self.stroke_removal(data, self.stroke_removal_prob)
 
             length = data.shape[0]
             strokes_3d = np.pad(data, ((0, self.paddingLength - data.shape[0]), (0, 0)), 'constant', constant_values=0)
@@ -335,7 +335,7 @@ class SketchDataset(Dataset):
             data = np.copy(self.imgs[index])
             img = np.reshape(data, [1,data.shape[0],data.shape[1]])
             # Image Augmentation
-            if not self.disable_augmentation:
+            if not self.disable_augmentation and self.mode == 'train':
                 img = self.random_scale_img(img)
                 img = self.random_rotate_img(img)
                 img = self.random_translate_img(img)

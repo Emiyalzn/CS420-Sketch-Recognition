@@ -209,7 +209,7 @@ class DenseExpander(nn.Module):
             x = F.relu(x)
         x = torch.unsqueeze(x, 2) # (batch_size, feat_dim_out, 1)
         x = self.expand_layer(x) # (batch_size, feat_dim_out, seq_len)
-        x = torch.permute(x, [0,2,1])
+        x = torch.permute(x, [0,2,1]) # (batch_size, seq_len, feat_dim_out)
         return x
 
 class Trans2CNN(BaseModel):
@@ -266,7 +266,7 @@ class Trans2CNN(BaseModel):
         images = RasterIntensityFunc.apply(points, intensities, self.img_size, self.thickness, self.eps, self.device)
         if images.size(1) == 1:
             images = images.repeat(1, 3, 1, 1)
-        cnnfeat = self.cnn(images)
+        cnnfeat = self.cnn(images) # (batch_size, feat_dim)
 
         if self.do_reconstruction:
             expand_embedding = self.expand_layer(cnnfeat)
