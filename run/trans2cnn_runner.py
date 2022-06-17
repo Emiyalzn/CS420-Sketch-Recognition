@@ -55,27 +55,31 @@ class Trans2CNNRunner(BaseRunner):
     def create_model(self, num_categories):
         dropout = self.config['dropout']
         intensity_channels = self.config['intensity_channels']
-        model_fn = self.config['model_fn']
-        img_size = CNN_IMAGE_SIZES[model_fn]
+        model_fn = CNN_MODELS[self.config['model_fn']]
+        img_size = CNN_IMAGE_SIZES[self.config['model_fn']]
         thickness = self.config['thickness']
+        do_reconstruction = self.config['do_reconstruction']
 
         return Trans2CNN(model_fn,
                          img_size,
                          thickness,
                          num_categories,
-                         intensity_channels,
+                         intensity_channels=intensity_channels,
+                         do_reconstruction=do_reconstruction,
+                         dropout=dropout,
                          device=self.device)
 
     def forward_batch(self, model, data_batch, mode, optimizer, criterion):
         is_train = mode == 'train'
 
         points = data_batch['points3'].to(self.device).contiguous()
+        points_offset = data_batch['points5_offset'].to(self.device).contiguous()
         category = data_batch['category'].to(self.device).contiguous()
 
         if is_train:
             optimizer.zero_grad()
         with torch.set_grad_enabled(is_train):
-            logits, attention, images = model(points)
+            logits = model(points_offset, points, is_train)
             loss = criterion(logits, category)
             if is_train:
                 loss.backward()

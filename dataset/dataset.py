@@ -21,7 +21,7 @@ class QuickDrawDataset(Dataset):
     def __init__(self,
                  mode,
                  data_seq_dir,
-                 stroke_removal_prob = 0.2,
+                 stroke_removal_prob = 0.15,
                  do_augmentation = False,
                  ):
         self.root_dir = data_seq_dir

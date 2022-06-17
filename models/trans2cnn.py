@@ -5,7 +5,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from trans_utils import positional_encoding, scaled_dot_product_attention, create_masks
+from models.trans_utils import positional_encoding, scaled_dot_product_attention, create_masks
 
 class MultiHeadAttention(nn.Module):
     def __init__(self, input_size, d_model, num_heads):
@@ -57,7 +57,7 @@ def point_wise_feed_forward_network(d_model, dff):
     return nn.Sequential(
         nn.Linear(d_model, dff),
         nn.ReLU(),
-        nn.Linear(d_model, dff)
+        nn.Linear(dff, d_model)
     )
 
 class EncoderLayer(nn.Module):
@@ -82,6 +82,41 @@ class EncoderLayer(nn.Module):
         out2 = self.layernorm2(out1 + ffn_output)
 
         return out2
+
+class TransEncoder(nn.Module):
+    def __init__(self, input_size, num_layers, d_model,
+                 num_heads, dff,
+                 maximum_position_encoding=1000,
+                 out_channels=8,
+                 rate=0.1):
+        super().__init__()
+
+        self.rate = rate
+        self.d_model = d_model
+        self.num_layers = num_layers
+        self.out_channels = out_channels
+
+        self.pos_encoding = positional_encoding(maximum_position_encoding, self.d_model)
+
+        self.embedding = nn.Linear(input_size, d_model)
+        self.enc_layers = nn.ModuleList([EncoderLayer(d_model, num_heads, dff, rate) for _ in range(num_layers)])
+        self.attend_fc = nn.Linear(d_model, out_channels)
+
+    def forward(self, x, training, mask):
+        seq_len = x.shape[1]
+
+        x = self.embedding(x)
+        x *= torch.sqrt(torch.tensor(self.d_model, dtype=torch.float32))
+        x += self.pos_encoding[:, :seq_len, ...].to(x.device)
+
+        x = F.dropout(x, self.rate, training)
+
+        for enc_layer in self.enc_layers:
+            x = enc_layer(x, training, mask)
+
+        intensities = torch.sigmoid(self.attend_fc(x))
+
+        return intensities # (batch_size, input_seq_len, out_channels)
 
 class DecoderLayer(nn.Module):
     def __init__(self, input_size, d_model, num_heads, dff, rate=0.1):
@@ -116,36 +151,6 @@ class DecoderLayer(nn.Module):
 
         return out3, attn_weights_block1, attn_weights_block2
 
-class TransEncoder(nn.Module):
-    def __init__(self, input_size, num_layers, d_model,
-                 num_heads, dff,
-                 maximum_position_encoding=1000,
-                 rate=0.1):
-        super().__init__()
-
-        self.rate = rate
-        self.d_model = d_model
-        self.num_layers = num_layers
-
-        self.embedding = nn.Linear(input_size, d_model)
-        self.pos_encoding = positional_encoding(maximum_position_encoding, self.d_model)
-
-        self.enc_layers = nn.ModuleList([EncoderLayer(d_model, num_heads, dff, rate) for _ in range(num_layers)])
-
-    def forward(self, x, training, mask):
-        seq_len = x.shape[1]
-
-        x = self.embedding(x)
-        x *= torch.sqrt(torch.tensor(self.d_model, torch.float32))
-        x += self.pos_encoding[:, :seq_len, ...]
-
-        x = F.dropout(x, self.rate, training)
-
-        for enc_layer in self.enc_layers:
-            x = enc_layer(x, training, mask)
-
-        return x # (batch_size, input_seq_len, d_model)
-
 class DenseExpander(nn.Module):
     """
     Expand tensor using Dense conv
@@ -176,7 +181,7 @@ class Trans2CNN(BaseModel):
                  img_size,
                  thickness,
                  num_categories,
-                 trans_input_size=3,
+                 trans_input_size=5,
                  num_layers=4,
                  d_model=128,
                  dff=512,
@@ -199,7 +204,8 @@ class Trans2CNN(BaseModel):
         names = list()
         train_flags = list()
 
-        self.encoder = TransEncoder(trans_input_size, num_layers, d_model, num_heads, dff, rate=dropout)
+        self.encoder = TransEncoder(trans_input_size, num_layers, d_model, num_heads, dff,
+                                    out_channels=intensity_channels, rate=dropout)
         self.cnn = cnn_fn(pretrained=False, requires_grad=train_cnn, in_channels=intensity_channels)
 
         num_fc_in_features = self.cnn.num_out_features
@@ -226,4 +232,4 @@ class Trans2CNN(BaseModel):
         cnnfeat = self.cnn(images)
         logits = self.fc(cnnfeat)
 
-        return logits, intensities, images
+        return logits

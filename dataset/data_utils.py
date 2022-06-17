@@ -37,7 +37,7 @@ def translate_mat(delta_x, delta_y):
     m[1, 2] = delta_y
     return m
 
-def random_affine_transform(points, scale_factor=0.2, rot_thresh=30.0):
+def random_affine_transform(points, scale_factor=0.1, rot_thresh=20.0):
     bbox_min, bbox_max = bbox(points)
     bbox_center = (bbox_min + bbox_max) / 2.0
     x_scale_factor = 1.0 - np.random.random() * scale_factor
@@ -60,7 +60,7 @@ def transform(points, mat):
     transformed_pts = np.matmul(temp_pts, mat.T)
     return transformed_pts[:, 0:2]
 
-def random_remove_strokes(strokes, prob=0.2):
+def random_remove_strokes(strokes, prob=0.15):
     result = []
     for i in range(len(strokes)):
         stroke = [strokes[i][0], strokes[i][1], strokes[i][2]]
@@ -71,7 +71,7 @@ def random_remove_strokes(strokes, prob=0.2):
         result.append(stroke)
     return np.array(result)
 
-def seqlen_remove_strokes(strokes, drop_prob=0.2):
+def seqlen_remove_strokes(strokes, drop_prob=0.15):
     alpha = 2
     beta = 0.5
     length = len(strokes)
@@ -92,7 +92,7 @@ def seqlen_remove_strokes(strokes, drop_prob=0.2):
         result[ind][2] = 1
     return result
 
-def seqlen_remove_points(points, drop_prob=0.2):
+def seqlen_remove_points(points, drop_prob=0.15):
     alpha = 2
     beta = 0.5
     length = len(points)

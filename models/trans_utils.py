@@ -16,7 +16,7 @@ def positional_encoding(position, d_model):
     # apply cos to odd indices in the array; 2i+1
     angle_rads[:, 1::2] = np.cos(angle_rads[:, 1::2])
     pos_encoding = angle_rads[np.newaxis, ...]
-    return pos_encoding.to(dtype=torch.float32)
+    return torch.tensor(pos_encoding, dtype=torch.float32)
 
 def scaled_dot_product_attention(q, k, v, mask):
     """calculate the attention weights"""
@@ -45,7 +45,7 @@ def create_padding_mask(seq):
 
 def create_look_ahead_mask(size):
     # create an lower tri and invert it to get an upper trianguler with no diag
-    mask = 1 - torch.triu(torch.ones(size, size), diagonal=1)
+    mask = 1 - torch.tril(torch.ones(size, size))
     return mask  # (seq_len, seq_len)
 
 def create_masks(inp, tar):
@@ -59,8 +59,8 @@ def create_masks(inp, tar):
     # Used in the 1st attention block in the decoder.
     # It is used to pad and mask future tokens in the input received by
     # the decoder.
-    look_ahead_mask = create_look_ahead_mask(tar.shape[1])
     dec_target_padding_mask = create_padding_mask(tar)
+    look_ahead_mask = create_look_ahead_mask(tar.shape[1]).to(dec_target_padding_mask.device)
     combined_mask = torch.maximum(dec_target_padding_mask, look_ahead_mask)
 
     return enc_padding_mask, combined_mask, dec_padding_mask
