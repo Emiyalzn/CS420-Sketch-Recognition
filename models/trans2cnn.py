@@ -5,40 +5,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
-def get_angles(pos, i, d_model):
-    angle_rates = 1 / np.power(10000, (2 * (i // 2)) / np.float32(d_model))
-    return pos * angle_rates
-
-def positional_encoding(position, d_model):
-    angle_rads = get_angles(np.arange(position)[:, np.newaxis],
-                            np.arange(d_model)[np.newaxis, :],
-                            d_model)
-    # apply sin to even indices in the array; 2i
-    angle_rads[:, 0::2] = np.sin(angle_rads[:, 0::2])
-
-    # apply cos to odd indices in the array; 2i+1
-    angle_rads[:, 1::2] = np.cos(angle_rads[:, 1::2])
-    pos_encoding = angle_rads[np.newaxis, ...]
-    return pos_encoding.to(dtype=torch.float32)
-
-def scaled_dot_product_attention(q, k, v, mask):
-    """calculate the attention weights"""
-    matmul_qk = torch.matmul(q, k.transpose(2,3)) # (..., seq_len_q, seq_len_k)
-
-    # scale matmul_qk
-    dk = torch.tensor(k.shape[-1], dtype=torch.float32)
-    scaled_attention_logits = matmul_qk / torch.sqrt(dk)
-
-    # add the mask to the scaled tensor.
-    if mask is not None:
-        scaled_attention_logits += (mask * -1e9)
-
-    # softmax is normalized on the last axis (seq_len_k) so that the scores
-    attention_weights = F.softmax(scaled_attention_logits, dim=-1)  # (..., seq_len_q, seq_len_k)
-    output = torch.matmul(attention_weights, v)  # (..., seq_len_q, depth_v)
-
-    return output, attention_weights
+from trans_utils import positional_encoding, scaled_dot_product_attention, create_masks
 
 class MultiHeadAttention(nn.Module):
     def __init__(self, input_size, d_model, num_heads):
@@ -209,7 +176,14 @@ class Trans2CNN(BaseModel):
                  img_size,
                  thickness,
                  num_categories,
+                 trans_input_size=3,
+                 num_layers=4,
+                 d_model=128,
+                 dff=512,
+                 num_heads=8,
+                 dropout=0.1,
                  intensity_channels=8,
+                 do_reconstruction=False,
                  train_cnn=True,
                  device=None):
         super().__init__()
@@ -218,13 +192,14 @@ class Trans2CNN(BaseModel):
         self.thickness = thickness
         self.intensity_channels = intensity_channels
         self.eps = 1e-4
+        self.do_reconstruction = do_reconstruction
         self.device = device
 
         nets = list()
         names = list()
         train_flags = list()
 
-        self.encoder = TransEncoder()
+        self.encoder = TransEncoder(trans_input_size, num_layers, d_model, num_heads, dff, rate=dropout)
         self.cnn = cnn_fn(pretrained=False, requires_grad=train_cnn, in_channels=intensity_channels)
 
         num_fc_in_features = self.cnn.num_out_features
@@ -237,8 +212,13 @@ class Trans2CNN(BaseModel):
         self.register_nets(nets, names, train_flags)
         self.to(device)
 
-    def __call__(self, points):
-        intensities = self.encoder()
+    def __call__(self, points_offset, points, training):
+        inp = tar = points_offset
+        tar_inp = tar[:, :-1, ...]
+        tar_real = tar[:, 1:, ...]
+
+        enc_padding_mask, combined_mask, dec_padding_mask = create_masks(inp, tar_inp)
+        intensities = self.encoder(inp, training, enc_padding_mask)
 
         images = RasterIntensityFunc.apply(points, intensities, self.img_size, self.thickness, self.eps, self.device)
         if images.size(1) == 1:
