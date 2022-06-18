@@ -25,7 +25,7 @@ from matplotlib.colors import ListedColormap,LinearSegmentedColormap
 from utils.seq2png import draw_strokes
 import cairosvg
 from PIL import Image
-import datetime
+from datetime import datetime
 
 
 class BaseRunner(object):
