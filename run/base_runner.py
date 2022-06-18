@@ -288,8 +288,9 @@ class BaseRunner(object):
     def visualize(self,
                   modes=['test'],
                   categories=None,
-                  num_per_categories=20,
-                  img_size=0.05,
+                  num_per_categories=100,
+                  img_size=0.025,
+                  width=28,
                   figsize=(48, 27),
                   colors = ['#d53e4f', '#f46d43', '#fdae61', '#fee08b',
                             '#e6f598', '#abdda4', '#66c2a5', '#3288bd',]):
@@ -300,16 +301,6 @@ class BaseRunner(object):
         # During visualize(), 'test' datasets are required
         self.modes = modes
 
-        # Temporarily use user-specific categories.
-        categories_backup = self.config['categories']
-        
-        if (categories is not None):
-            self.config['categories'] = categories
-        else:
-            # `categories` will be used subsequently
-            categories = self.config['categories']
-            
-
         test_data = self.prepare_dataset()
         num_categories = len(self.config['categories'])
         self.logger.info(f"Number of categories: {num_categories}")
@@ -317,6 +308,13 @@ class BaseRunner(object):
         data_loaders = self.create_data_loaders(test_data)
 
         for seed in self.config['seed']:
+            # Temporarily use user-specific categories.
+            categories_backup = self.config['categories']
+            if (categories is not None):
+                self.config['categories'] = categories
+            else:
+                categories = self.config['categories']
+            
             # initialize network
             net = self.create_model(num_categories)
             path_prefix = os.path.join(self.model_dir, f'_iter_best_{seed}')
@@ -355,12 +353,13 @@ class BaseRunner(object):
                                     # import pdb; pdb.set_trace()
                                     cur_seq = np.concatenate([cur_seq[[0], :], np.diff(cur_seq, axis=0)], axis=0)
                                     
-                                    draw_strokes(cur_seq, os.path.join(self.local_dir, 'tmp.svg'), width=224)
+                                    draw_strokes(cur_seq, os.path.join(self.local_dir, 'tmp.svg'), width=width)
                                     with open(os.path.join(self.local_dir, 'tmp.svg'), 'r') as f_in:
                                         svg = f_in.read()
                                         f_in.close()
                                     cairosvg.svg2png(bytestring=svg, write_to=os.path.join(self.local_dir, 'tmp.png'))
-                                    cur_img = -1 * np.array(Image.open(os.path.join(self.local_dir, 'tmp.png'))) / 255.0 + 1
+                                    cur_img = np.array(Image.open(os.path.join(self.local_dir, 'tmp.png'))) / 255.0
+                                    cur_img = np.sum(cur_img, axis=-1)
                                     # import pdb; pdb.set_trace()
                                     
                                 elif (isinstance(data_batch, list)): # SketchDataset
@@ -382,14 +381,15 @@ class BaseRunner(object):
                         n_iter=1000,
                         init="pca",
                         learning_rate='auto',
-                        random_state=42)
+                        random_state=42,
+                        method='barnets_hut')
                     
                     feats_reduced = tsne.fit_transform(feats)
                     
                     feats_normed = (feats_reduced - feats_reduced.min(axis=0, keepdims=True)) / (feats_reduced.max(axis=0, keepdims=True) - feats_reduced.min(axis=0, keepdims=True))
-                    feats_normed = feats_normed * 0.7 + 0.1
+                    feats_normed = feats_normed * (1 - 2*img_size) + img_size
                     
-                    feats_per_category = np.split(feats_normed, num_categories)
+                    feats_per_category = np.split(feats_normed, len(categories))
                     for i in range(len(categories)):
                         samples[i][0] = feats_per_category[i]
                     
@@ -411,6 +411,8 @@ class BaseRunner(object):
                     axs = []
 
                     for k, v in samples.items():
+                        if (k >= len(categories)):
+                            continue
                         cmap = cmaps[k % len(cmaps)]
                         color = cmap(1.0)
                         label = categories[k]
@@ -419,6 +421,8 @@ class BaseRunner(object):
                         imgs = v[1]
                         
                         # import pdb; pdb.set_trace()
+                        if (len(xs) != len(imgs)):
+                            import pdb; pdb.set_trace()
 
                         ax.scatter(xs, ys, c=[color] * len(xs), label=label)
 
@@ -433,8 +437,9 @@ class BaseRunner(object):
                     np.save(os.path.join(self.local_dir, f"samples_processed_{mode}_{seed}.npy"), samples, allow_pickle=True)
                     plt.savefig(os.path.join(self.local_dir, f'tsne_{mode}_{seed}.png'))
 
+            self.config['categories'] = categories_backup
+                    
         for m in self.modes:
             test_data[m].dispose()
         
         # Restore from backup
-        self.config['categories'] = categories_backup
