@@ -5,7 +5,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from models.trans_utils import positional_encoding, scaled_dot_product_attention, create_masks
+from models.trans_utils import positional_encoding, scaled_dot_product_attention, create_masks, create_look_ahead_mask
 
 class MultiHeadAttention(nn.Module):
     def __init__(self, input_size, d_model, num_heads):
@@ -196,12 +196,12 @@ class DenseExpander(nn.Module):
     """
     def __init__(self, input_size, seq_len, feat_dim_out=0):
         super(DenseExpander, self).__init__()
-        self.seq_len = seq_len
+        self.max_seq_len = seq_len
         self.feat_dim_out = feat_dim_out
 
         if self.feat_dim_out:
             self.project_layer = nn.Linear(input_size, self.feat_dim_out)
-        self.expand_layer = nn.Linear(1, self.seq_len)
+        self.expand_layer = nn.Linear(1, self.max_seq_len)
 
     def forward(self, x):
         if self.feat_dim_out:
@@ -223,6 +223,7 @@ class Trans2CNN(BaseModel):
                  device=None):
         super().__init__()
 
+        self.max_seq_len = max_seq_len
         self.img_size = img_size
         self.thickness = thickness
         self.intensity_channels = intensity_channels
@@ -278,6 +279,59 @@ class Trans2CNN(BaseModel):
 
         return logits, dec_output
 
+    def make_dummy_input(self, nattn, batch_size):
+        nignore = self.max_seq_len - nattn
+
+        dummy = torch.concat((
+            torch.ones((batch_size, nattn, 5)) * torch.zeros((5,)),
+            torch.ones((batch_size, nignore, 5)) * torch.tensor([0., 0., 0., 0., 1.])
+        ), axis=1)
+
+        return dummy
+
+    def decode(self, cnnfeats, expected_len=None):
+        """
+        reconstruct sketch from bottle neck layer
+        different from predict: input is embedding instead of a sketch
+        :param cnnfeats: cnn feature vector
+        :param expected_len: expected length as if input sketch is known (will be ignored if blind_decoder_mask=True
+        :return: dict of relevant outputs
+        """
+        decoder_input = torch.tensor([0., 0., 1., 0., 0.])
+        output = torch.ones((cnnfeats.shape[0], 1, 5)) * decoder_input
+
+        for i in range(self.max_seq_len):
+            nattn = expected_len if expected_len is not None else i + 1
+
+            enc_input_dummy = self.make_dummy_input(
+                nattn=nattn, batch_size=cnnfeats.shape[0])
+            enc_padding_mask, combined_mask, dec_padding_mask = create_masks(
+                enc_input_dummy, output)
+            
+            # x, enc_output, training, look_ahead_mask, padding_mask
+            # embedding, output, dec_padding_mask, combined_mask, False
+
+            # predictions.shape == (batch_size, seq_len, vocab_size)
+            # res = self.decode(cnnfeats, output, dec_padding_mask, combined_mask, False)
+            pre_decoder = self.expand_layer(cnnfeats)
+            dec_output, _ = self.decoder(output, pre_decoder, False, combined_mask, dec_padding_mask)
+            res = self.output_layer(dec_output)
+            
+            # select the last word from the seq_len dimension
+            predicted = res[:, -1:, ...]  # (batch_size, 1, vocab_size)
+
+            predicted = torch.concat((predicted[..., :2],
+                                    F.softmax(predicted[..., 2:], dim=-1)), dim=-1)
+            finished_ones = torch.sum(torch.argmax(predicted[...,  2:], dim=-1) == 2)
+            output = torch.concat([output, predicted], dim=1)
+            if finished_ones == cnnfeats.shape[0]:
+                break
+
+            # concatentate the predicted_id to the output which is given to the decoder
+            # as its input.
+
+        return output
+
     def embed(self, points_offset, points, training):
         inp = tar = points_offset
         tar_inp = tar[:, :-1, ...]
@@ -288,6 +342,6 @@ class Trans2CNN(BaseModel):
         images = RasterIntensityFunc.apply(points, intensities, self.img_size, self.thickness, self.eps, self.device)
         if images.size(1) == 1:
             images = images.repeat(1, 3, 1, 1)
-        cnnfeat = self.cnn(images) # (batch_size, feat_dim)
+        cnnfeats = self.cnn(images) # (batch_size, feat_dim)
 
-        return cnnfeat
+        return cnnfeats
