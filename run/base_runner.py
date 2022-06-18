@@ -290,6 +290,7 @@ class BaseRunner(object):
                   categories=None,
                   num_per_categories=20,
                   img_size=0.05,
+                  figsize=(48, 27),
                   colors = ['#d53e4f', '#f46d43', '#fdae61', '#fee08b',
                             '#e6f598', '#abdda4', '#66c2a5', '#3288bd',]):
         cmaps = [
@@ -340,7 +341,6 @@ class BaseRunner(object):
 
                         feats_batch, categories_batch = self.embed_batch(net, data_batch)
                         feats_batch = feats_batch.cpu().numpy()
-                        imgs_batch = imgs_batch.cpu().numpy()
                         categories_batch = categories_batch.cpu().numpy()
                         
                         for i in range(len(feats_batch)):
@@ -352,12 +352,16 @@ class BaseRunner(object):
                                 cur_img = None
                                 if (isinstance(data_batch, dict)):  # QuickDrawDataset
                                     cur_seq = data_batch['points3'][i].cpu().numpy()
-                                    draw_strokes(cur_seq, os.path.join(self.local_dir, '/tmp.svg', width=224))
-                                    with open(os.path.join(self.local_dir, '/tmp.svg', 'r')) as f_in:
+                                    # import pdb; pdb.set_trace()
+                                    cur_seq = np.concatenate([cur_seq[[0], :], np.diff(cur_seq, axis=0)], axis=0)
+                                    
+                                    draw_strokes(cur_seq, os.path.join(self.local_dir, 'tmp.svg'), width=224)
+                                    with open(os.path.join(self.local_dir, 'tmp.svg'), 'r') as f_in:
                                         svg = f_in.read()
                                         f_in.close()
-                                    cairosvg.svg2png(bytestring=svg, write_to=os.path.join(self.local_dir, '/tmp.png'))
-                                    cur_img = np.array(Image.open(os.path.join(self.local_dir, '/tmp.png')))
+                                    cairosvg.svg2png(bytestring=svg, write_to=os.path.join(self.local_dir, 'tmp.png'))
+                                    cur_img = -1 * np.array(Image.open(os.path.join(self.local_dir, 'tmp.png'))) / 255.0 + 1
+                                    # import pdb; pdb.set_trace()
                                     
                                 elif (isinstance(data_batch, list)): # SketchDataset
                                     cur_img = data_batch[3][i, 0, :, :].cpu().numpy()
@@ -389,7 +393,7 @@ class BaseRunner(object):
                     for i in range(len(categories)):
                         samples[i][0] = feats_per_category[i]
                     
-                    fig = plt.figure(figsize=(16, 9))
+                    fig = plt.figure(figsize=figsize)
                     
                     # White background.
                     # Removing this code can result in a transparent background.
@@ -413,6 +417,8 @@ class BaseRunner(object):
                         xs = v[0][:, 0]
                         ys = v[0][:, 1]
                         imgs = v[1]
+                        
+                        # import pdb; pdb.set_trace()
 
                         ax.scatter(xs, ys, c=[color] * len(xs), label=label)
 
@@ -424,6 +430,7 @@ class BaseRunner(object):
 
                     ax.legend()
 
+                    np.save(os.path.join(self.local_dir, f"samples_processed_{mode}_{seed}.npy"), samples, allow_pickle=True)
                     plt.savefig(os.path.join(self.local_dir, f'tsne_{mode}_{seed}.png'))
 
         for m in self.modes:
