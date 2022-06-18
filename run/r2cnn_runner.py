@@ -100,3 +100,12 @@ class SketchR2CNNRunner(BaseRunner):
                 optimizer.step()
 
         return logits, loss, category
+
+    def embed_batch(self, model, data_batch):
+        points = data_batch['points3'].to(self.device).contiguous()
+        points_offset = data_batch['points3_offset'].to(self.device).contiguous()
+        points_length = data_batch['points3_length'].contiguous()
+        feats = model.embed(points, points_offset, points_length)
+        category = data_batch['category'].to(self.device).contiguous()
+        
+        return feats, category

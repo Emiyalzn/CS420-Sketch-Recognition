@@ -277,3 +277,17 @@ class Trans2CNN(BaseModel):
         logits = self.fc(cnnfeat)
 
         return logits, dec_output
+
+    def embed(self, points_offset, points, training):
+        inp = tar = points_offset
+        tar_inp = tar[:, :-1, ...]
+
+        enc_padding_mask, combined_mask, dec_padding_mask = create_masks(inp, tar_inp)
+        intensities = self.encoder(inp, training, enc_padding_mask)
+
+        images = RasterIntensityFunc.apply(points, intensities, self.img_size, self.thickness, self.eps, self.device)
+        if images.size(1) == 1:
+            images = images.repeat(1, 3, 1, 1)
+        cnnfeat = self.cnn(images) # (batch_size, feat_dim)
+
+        return cnnfeat

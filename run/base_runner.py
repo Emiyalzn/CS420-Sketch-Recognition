@@ -18,6 +18,14 @@ from utils.utils import args_print, fix_seed
 
 from utils.evaluation import compute_running_corrects
 
+import warnings
+from sklearn.manifold import TSNE
+from matplotlib import pyplot as plt
+from matplotlib.colors import ListedColormap,LinearSegmentedColormap
+from utils.seq2png import draw_strokes
+import cairosvg
+from PIL import Image
+
 
 class BaseRunner(object):
     def __init__(self, local_dir, args=None):
@@ -29,6 +37,7 @@ class BaseRunner(object):
         self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
         # init folder and logger
+        self.local_dir = local_dir
         self.model_dir = os.path.join(local_dir, "model")
         os.makedirs(self.model_dir, exist_ok=True)
         self.logger = Logger.init_logger(filename=local_dir + '/_output_.log')
@@ -90,6 +99,9 @@ class BaseRunner(object):
         raise NotImplementedError
 
     def forward_batch(self, model, data_batch, mode, optimizer, criterion):
+        raise NotImplementedError
+
+    def embed_batch(self, model, data_batch):
         raise NotImplementedError
 
     def train(self):
@@ -198,9 +210,9 @@ class BaseRunner(object):
         def step(self):
             pass
 
-    def evaluate(self):
+    def evaluate(self, modes=['test']):
         # During evaluate(), 'test' datasets are required
-        self.modes = ['test']
+        self.modes = modes
 
         test_data = self.prepare_dataset()
         num_categories = len(self.config['categories'])
@@ -220,54 +232,202 @@ class BaseRunner(object):
             self.logger.info('-' * 20)
 
             # self.modes = ['test']
-            for mode in self.modes:
-                self.logger.info(f"Start {mode} mode.")
-                net.eval_mode()
+            with torch.no_grad():
+                for mode in self.modes:
+                    self.logger.info(f"Start {mode} mode.")
+                    net.eval_mode()
+                    
+                    confusion_matrix = torch.zeros((num_categories, num_categories), dtype=torch.int)
+                    running_corrects_top1 = 0
+                    running_corrects_top5 = 0
+                    num_samples = 0
+                    pbar = tqdm.tqdm(total=len(data_loaders[mode]))
+                    for bid, data_batch in enumerate(data_loaders[mode]):
+                        # self.step_counters[mode] += 1
 
-                confusion_matrix = torch.zeros((num_categories, num_categories), dtype=torch.int)
-                running_corrects_top1 = 0
-                running_corrects_top5 = 0
-                num_samples = 0
-                pbar = tqdm.tqdm(total=len(data_loaders[mode]))
-                for bid, data_batch in enumerate(data_loaders[mode]):
-                    # self.step_counters[mode] += 1
+                        logits, _, gt_category = self.forward_batch(net, data_batch, mode, BaseRunner.DummyOptimizer(), lambda _1, _2: 0)
+                        _, predicts = torch.max(logits, 1)
+                        confusion_matrix[gt_category, predicts] += 1
+                        # predicts_accu = torch.sum(predicts == gt_category)
+                        running_corrects = compute_running_corrects(logits, gt_category, (1, 5))
+                        running_corrects_top1 += running_corrects[1]
+                        running_corrects_top5 += running_corrects[5]
 
-                    logits, _, gt_category = self.forward_batch(net, data_batch, mode, BaseRunner.DummyOptimizer(), lambda _1, _2: 0)
-                    _, predicts = torch.max(logits, 1)
-                    confusion_matrix[gt_category, predicts] += 1
-                    # predicts_accu = torch.sum(predicts == gt_category)
-                    running_corrects = compute_running_corrects(logits, gt_category, (1, 5))
-                    running_corrects_top1 += running_corrects[1]
-                    running_corrects_top5 += running_corrects[5]
+                        sampled_batch_size = gt_category.size(0)
+                        num_samples += sampled_batch_size
 
-                    sampled_batch_size = gt_category.size(0)
-                    num_samples += sampled_batch_size
+                        pbar.update()
+                    pbar.close()
 
-                    pbar.update()
-                pbar.close()
-
-                epoch_acc_1 = float(running_corrects_top1) / float(num_samples)
-                epoch_acc_5 = float(running_corrects_top5) / float(num_samples)
-                self.logger.info(f"{mode}:\tTop1-Accuracy: {epoch_acc_1:.4f} | Top5-Accuracy: {epoch_acc_5:.4f}")
+                    epoch_acc_1 = float(running_corrects_top1) / float(num_samples)
+                    epoch_acc_5 = float(running_corrects_top5) / float(num_samples)
+                    self.logger.info(f"{mode}:\tTop1-Accuracy: {epoch_acc_1:.4f} | Top5-Accuracy: {epoch_acc_5:.4f}")
+                    
+                    for i, k in enumerate(self.config['categories']):
+                        TP = confusion_matrix[i, i]
+                        TN = torch.sum(confusion_matrix[:i, :i]) + torch.sum(confusion_matrix[:i, i+1:]) \
+                        + torch.sum(confusion_matrix[i+1:, :i]) + torch.sum(confusion_matrix[i+1:, i+1:])
                 
-                for i, k in enumerate(self.config['categories']):
-                    TP = confusion_matrix[i, i]
-                    TN = torch.sum(confusion_matrix[:i, :i]) + torch.sum(confusion_matrix[:i, i+1:]) \
-                    + torch.sum(confusion_matrix[i+1:, :i]) + torch.sum(confusion_matrix[i+1:, i+1:])
-            
-                    T = torch.sum(confusion_matrix[i])    # = TP + FN
-                    P = torch.sum(confusion_matrix[:, i]) # = TP + FP
-                    
-                    FN = T - TP
-                    FP = P - TP
-                    
-                    accuracy = (TP + TN) / (TP + FN + FP + TN)
-                    precision = TP / (TP + FP)
-                    recall = TP / (TP + FN)
-                    f1 = 2 * precision * recall / (precision + recall)
-                    
-                    self.logger.info(f'{mode}-{k}: Accuracy: {accuracy} | Precision: {precision} | Recall: {recall} | F1: {f1}')
-                np.save(os.path.join(self.local_dir, f"confusion_matrix_{seed}.npy"), confusion_matrix.cpu().numpy())
+                        T = torch.sum(confusion_matrix[i])    # = TP + FN
+                        P = torch.sum(confusion_matrix[:, i]) # = TP + FP
+                        
+                        FN = T - TP
+                        FP = P - TP
+                        
+                        accuracy = (TP + TN) / (TP + FN + FP + TN)
+                        precision = TP / (TP + FP)
+                        recall = TP / (TP + FN)
+                        f1 = 2 * precision * recall / (precision + recall)
+                        
+                        self.logger.info(f'{mode}-{k}: Accuracy: {accuracy} | Precision: {precision} | Recall: {recall} | F1: {f1}')
+                    np.save(os.path.join(self.local_dir, f"confusion_matrix_{mode}_{seed}.npy"), confusion_matrix.cpu().numpy())
 
         for m in self.modes:
             test_data[m].dispose()
+
+    def visualize(self,
+                  modes=['test'],
+                  categories=None,
+                  num_per_categories=20,
+                  img_size=0.05,
+                  colors = ['#d53e4f', '#f46d43', '#fdae61', '#fee08b',
+                            '#e6f598', '#abdda4', '#66c2a5', '#3288bd',]):
+        cmaps = [
+            LinearSegmentedColormap.from_list(f'sketch_{i}', ['white', color]) for i, color in enumerate(colors)
+        ]
+        
+        # During visualize(), 'test' datasets are required
+        self.modes = modes
+
+        # Temporarily use user-specific categories.
+        categories_backup = self.config['categories']
+        
+        if (categories is not None):
+            self.config['categories'] = categories
+        else:
+            # `categories` will be used subsequently
+            categories = self.config['categories']
+            
+
+        test_data = self.prepare_dataset()
+        num_categories = len(self.config['categories'])
+        self.logger.info(f"Number of categories: {num_categories}")
+        
+        data_loaders = self.create_data_loaders(test_data)
+
+        for seed in self.config['seed']:
+            # initialize network
+            net = self.create_model(num_categories)
+            path_prefix = os.path.join(self.model_dir, f'_iter_best_{seed}')
+            net.load(path_prefix)
+
+            self.logger.info(f"Read model of seed {seed}.")
+            fix_seed(seed)
+
+            self.logger.info('-' * 20)
+
+            # self.modes = ['test']
+            with torch.no_grad():
+                for mode in self.modes:
+                    self.logger.info(f"Start {mode} mode.")
+                    net.eval_mode()
+
+                    samples = dict()
+                    pbar = tqdm.tqdm(total=len(data_loaders[mode]))
+                    
+                    for _, data_batch in enumerate(data_loaders[mode]):
+                        # self.step_counters[mode] += 1
+
+                        feats_batch, categories_batch = self.embed_batch(net, data_batch)
+                        feats_batch = feats_batch.cpu().numpy()
+                        imgs_batch = imgs_batch.cpu().numpy()
+                        categories_batch = categories_batch.cpu().numpy()
+                        
+                        for i in range(len(feats_batch)):
+                            if (categories_batch[i] not in samples.keys()):
+                                samples[categories_batch[i]] = [[], []]
+                            if (len(samples[categories_batch[i]][0])) < num_per_categories:
+                                samples[categories_batch[i]][0].append(feats_batch[i])
+                                
+                                cur_img = None
+                                if (isinstance(data_batch, dict)):  # QuickDrawDataset
+                                    cur_seq = data_batch['points3'][i].cpu().numpy()
+                                    draw_strokes(cur_seq, os.path.join(self.local_dir, '/tmp.svg', width=224))
+                                    with open(os.path.join(self.local_dir, '/tmp.svg', 'r')) as f_in:
+                                        svg = f_in.read()
+                                        f_in.close()
+                                    cairosvg.svg2png(bytestring=svg, write_to=os.path.join(self.local_dir, '/tmp.png'))
+                                    cur_img = np.array(Image.open(os.path.join(self.local_dir, '/tmp.png')))
+                                    
+                                elif (isinstance(data_batch, list)): # SketchDataset
+                                    cur_img = data_batch[3][i, 0, :, :].cpu().numpy()
+                                else:
+                                    raise NotImplementedError(f'Unexpected type of `data_batch`: {type(data_batch)}')
+                                samples[categories_batch[i]][1].append(cur_img)
+
+                        pbar.update()
+                    pbar.close()
+                    
+                    np.save(os.path.join(self.local_dir, f"samples_{mode}_{seed}.npy"), samples, allow_pickle=True)
+                    
+                    feats = np.concatenate([samples[i][0] for i in range(len(categories))])
+                    
+                    warnings.simplefilter('ignore', FutureWarning)
+                    tsne = TSNE(n_components=2,
+                        verbose=False, perplexity=30,
+                        n_iter=1000,
+                        init="pca",
+                        learning_rate='auto',
+                        random_state=42)
+                    
+                    feats_reduced = tsne.fit_transform(feats)
+                    
+                    feats_normed = (feats_reduced - feats_reduced.min(axis=0, keepdims=True)) / (feats_reduced.max(axis=0, keepdims=True) - feats_reduced.min(axis=0, keepdims=True))
+                    feats_normed = feats_normed * 0.7 + 0.1
+                    
+                    feats_per_category = np.split(feats_normed, num_categories)
+                    for i in range(len(categories)):
+                        samples[i][0] = feats_per_category[i]
+                    
+                    fig = plt.figure(figsize=(16, 9))
+                    
+                    # White background.
+                    # Removing this code can result in a transparent background.
+                    bg = fig.add_axes([0, 0, 1, 1])
+                    bg.set_xticks([])
+                    bg.set_yticks([])
+                    bg.axis('off')
+                    
+                    # Scatter graph
+                    ax = fig.add_axes([0.75, 0, 0.25, 0.25])
+                    ax.set_xticks([])
+                    ax.set_yticks([])
+                    
+                    # Visualization of each small picture
+                    axs = []
+
+                    for k, v in samples.items():
+                        cmap = cmaps[k % len(cmaps)]
+                        color = cmap(1.0)
+                        label = categories[k]
+                        xs = v[0][:, 0]
+                        ys = v[0][:, 1]
+                        imgs = v[1]
+
+                        ax.scatter(xs, ys, c=[color] * len(xs), label=label)
+
+                        for i, img in enumerate(imgs):
+                            ax_img = fig.add_axes([xs[i]+img_size/2, ys[i]+img_size/2, img_size, img_size])
+                            ax_img.imshow(-img+1.0, cmap=cmap)
+                            ax_img.axis('off')
+                            axs.append(ax_img)
+
+                    ax.legend()
+
+                    plt.savefig(os.path.join(self.local_dir, f'tsne_{mode}_{seed}.png'))
+
+        for m in self.modes:
+            test_data[m].dispose()
+        
+        # Restore from backup
+        self.config['categories'] = categories_backup

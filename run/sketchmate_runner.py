@@ -95,3 +95,12 @@ class SketchMateRunner(BaseRunner):
                 optimizer.step()
 
         return logits, loss, categories
+
+    def embed_batch(self, model, data_batch):
+        points_offset = data_batch[0].to(self.device).contiguous()
+        points_length = data_batch[2].contiguous()
+        images = self.transform(data_batch[3].repeat([1,3,1,1]).contiguous()).to(self.device)
+        categories = data_batch[4].to(self.device).contiguous()
+        feats = model.embed(points_offset, points_length, images)
+        
+        return feats, categories

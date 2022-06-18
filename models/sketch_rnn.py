@@ -37,3 +37,9 @@ class SketchRNN(BaseModel):
         logits = self.fc(rnnfeat)
 
         return logits
+
+    def embed(self, points, lengths):
+        # images does not used in this model
+        rnnfeat = self.rnn(points, lengths)
+
+        return rnnfeat

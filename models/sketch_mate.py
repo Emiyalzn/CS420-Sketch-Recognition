@@ -40,3 +40,10 @@ class SketchMate(BaseModel):
         logits = self.fc(fused_feat)
 
         return logits
+
+    
+    def embed(self, points_offset, lengths, imgs):
+        cnnfeat = self.cnn(imgs)
+        rnnfeat = self.rnn(points_offset, lengths)
+        fused_feat = torch.cat([cnnfeat, rnnfeat], dim=1)
+        return fused_feat

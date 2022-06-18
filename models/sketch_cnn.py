@@ -38,3 +38,7 @@ class SketchCNN(BaseModel):
         logits = self.fc(cnnfeat)
 
         return logits
+    
+    def embed(self, images):
+        cnnfeat = self.cnn(images)
+        return cnnfeat

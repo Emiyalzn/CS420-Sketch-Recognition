@@ -102,3 +102,11 @@ class SketchCNNRunner(BaseRunner):
                 optimizer.step()
 
         return logits, loss, categories
+
+
+    def embed_batch(self, model, data_batch):
+        images = self.transform(data_batch[3].repeat([1, 3, 1, 1]).contiguous()).to(self.device)
+        categories = data_batch[4].to(self.device)
+        feats = model.embed(images=images)
+        
+        return feats, categories

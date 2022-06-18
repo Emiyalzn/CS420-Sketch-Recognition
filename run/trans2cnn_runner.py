@@ -93,3 +93,10 @@ class Trans2CNNRunner(BaseRunner):
 
         return logits, loss, category
 
+    def embed_batch(self, model, data_batch):
+        points = data_batch['points3'].to(self.device).contiguous()
+        points_offset = data_batch['points5_offset'].to(self.device).contiguous()
+        categories = data_batch['category'].to(self.device).contiguous()
+        feats = model.embed(points_offset, points, False)
+        
+        return feats, categories
