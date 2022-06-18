@@ -40,7 +40,7 @@ class BaseRunner(object):
         self.local_dir = local_dir
         self.model_dir = os.path.join(local_dir, "model")
         os.makedirs(self.model_dir, exist_ok=True)
-        self.logger = Logger.init_logger(filename=local_dir + '/_output_.log')
+        self.logger = Logger.init_logger(filename=local_dir + f'/_output_{datetime.now().strftime("%Y%m%d-%H%M%S")}.log')
         args_print(self.config, self.logger)
 
     def __enter__(self):
