@@ -8,7 +8,7 @@ This repo contains the code of our project:
 
 [[`Paper`](https://github.com/Emiyalzn/CS420-Sketch-Recognition/blob/main/project_report.pdf)] [[`Model Checkpoint`](https://drive.google.com/drive/folders/1frGandm0SpVK9wcgmEk1bfdpFyapPMgs?usp=sharing)]
 
-![trans2cnn](figures/Framework.png)
+![trans2cnn](figures/framework.png)
 
 ## TODO
 
