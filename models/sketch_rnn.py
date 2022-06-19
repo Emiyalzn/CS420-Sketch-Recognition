@@ -42,6 +42,5 @@ class SketchRNN(BaseModel):
     def embed(self, points, lengths):
         # images does not used in this model
         rnnfeat = self.rnn(points, lengths)
-        # rnnfeat = self.fc(rnnfeat)
 
         return rnnfeat

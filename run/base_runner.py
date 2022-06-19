@@ -135,6 +135,7 @@ class BaseRunner(object):
             self.logger.info(f"Fix seed {seed}.")
             fix_seed(seed)
             best_val_acc = 0.0
+            best_test_acc = 0.0
             best_epoch = -1
             epoch_count = 0 # use for early stopping
 
@@ -184,8 +185,8 @@ class BaseRunner(object):
                         else:
                             epoch_count += 1
 
-                    # if mode == 'test' and best_epoch == epoch:
-                    #     best_test_acc = epoch_acc
+                    if mode == 'test' and best_epoch == epoch:
+                        best_test_acc = epoch_acc
 
                 # early stopping
                 if epoch_count >= early_stopping:
@@ -193,13 +194,14 @@ class BaseRunner(object):
                     break
 
             self.logger.info(f"Best valid acc: {best_val_acc:.4f}, "
-                             f"corresponding epoch: {best_epoch}.")
+                             f"corresponding epoch: {best_epoch}, "
+                             f"corresponding test acc: {best_test_acc:.4f}.")
             best_acc_record['valid'].append(best_val_acc)
-            # best_acc_record['test'].append(best_test_acc)
+            best_acc_record['test'].append(best_test_acc)
 
         self.logger.info(
-            f"Average valid acc: {np.mean(best_acc_record['valid']):.4f}±{np.std(best_acc_record['valid']):.4f}")
-            # f"Average test acc: {np.mean(best_acc_record['test']):.4f}±{np.std(best_acc_record['test']):.4f}")
+            f"Average valid acc: {np.mean(best_acc_record['valid']):.4f}±{np.std(best_acc_record['valid']):.4f}"
+            f"Average test acc: {np.mean(best_acc_record['test']):.4f}±{np.std(best_acc_record['test']):.4f}")
 
         for m in self.modes:
             train_data[m].dispose()
@@ -384,8 +386,7 @@ class BaseRunner(object):
                 test_data[m].dispose()
         
         self.config['robustness_experiment'] = False
-        
-        # During visualize(), 'test' datasets are required
+
     def visualize_emb(self,
                       modes=['test'],
                       categories=['bear', 'cat', 'crocodile', 'elephant', 'giraffe'],
@@ -433,7 +434,7 @@ class BaseRunner(object):
 
                 feats = np.concatenate([samples[i] for i in range(len(categories))])
                 labels = np.concatenate([[category for _ in range(num_per_categories)] for category in categories])
-                filename = os.path.join(self.local_dir, f"tsne_{seed}.pdf")
+                filename = os.path.join(self.local_dir, f"tsne_{seed}_{mode}.pdf")
                 warnings.simplefilter('ignore', FutureWarning)
 
                 tsne_vis(feats, labels, filename, len(categories))
