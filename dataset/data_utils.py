@@ -60,7 +60,49 @@ def transform(points, mat):
     transformed_pts = np.matmul(temp_pts, mat.T)
     return transformed_pts[:, 0:2]
 
+def to_stroke_list(points3):
+    split_idxes = np.nonzero(points3[:, 2])[0] + 1
+    strokes = np.split(points3, split_idxes[:-1], axis=0)
+    return strokes
+
+def stroke_length(points):
+    num_pts = len(points)
+    if num_pts < 2:
+        return 0
+    elif num_pts == 2:
+        return np.linalg.norm(points[0, :] - points[1, :])
+    else:
+        pt_dist = points[1:, :] - points[:-1, :]
+        return np.sum(np.linalg.norm(pt_dist, axis=1))
+
+def compute_stroke_orders(strokes, alpha=1.0, beta=2.0, scaling=100.0):
+    num_strokes = len(strokes)
+    stroke_lens = [stroke_length(strokes[idx]) for idx in range(num_strokes)]
+    stroke_lens = np.array(stroke_lens, dtype=np.float32) * scaling
+    stroke_max_len = np.amax(stroke_lens)
+    stroke_lens /= stroke_max_len
+
+    stroke_orders = np.array(np.arange(num_strokes) + 1, dtype=np.float32)
+    stroke_orders /= float(num_strokes)
+
+    stroke_drop_prob = np.exp(alpha * stroke_orders) / np.exp(beta * stroke_lens)
+    sort_idxs = np.argsort(stroke_drop_prob)
+    return sort_idxs.tolist()
+
+def random_drop_strokes(points3, prob=0.5):
+    strokes = to_stroke_list(points3)
+    num_strokes = len(strokes)
+    if num_strokes < 2:
+        return points3
+    sort_idxes = compute_stroke_orders([s[:, 0:2] for s in strokes])
+    keep_prob = np.random.uniform(0, 1, num_strokes)
+    keep_prob[:(num_strokes // 2)] = 1
+    keep_idxes = np.array(sort_idxes, np.int32)[keep_prob > prob]
+    keep_strokes = [strokes[i] for i in sorted(keep_idxes.tolist())]
+    return np.concatenate(keep_strokes, axis=0)
+    
 def random_remove_strokes(strokes, prob=0.15):
+    print(prob)
     result = []
     for i in range(len(strokes)):
         stroke = [strokes[i][0], strokes[i][1], strokes[i][2]]
@@ -92,9 +134,7 @@ def seqlen_remove_strokes(strokes, drop_prob=0.15):
         result[ind][2] = 1
     return result
 
-def seqlen_remove_points(points, drop_prob=0.15):
-    alpha = 2
-    beta = 0.5
+def seqlen_remove_points(points, drop_prob=0.15, alpha=2, beta=0.5):
     length = len(points)
     count = 0
     probs = [0.]
@@ -112,6 +152,8 @@ def seqlen_remove_points(points, drop_prob=0.15):
     for ind in drop_indices:
         result[ind][2] = 1
     return result
+
+
 
 def seq_3d_to_5d(stroke, max_len=250):
     """ Convert from 3D format (npz file) to 5D (sketch-rnn paper) """

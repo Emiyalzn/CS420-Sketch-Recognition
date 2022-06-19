@@ -25,7 +25,8 @@ class SketchRNN(BaseModel):
         self.fc = nn.Linear(num_fc_in_features, num_categories)
 
         nets.extend([self.rnn, self.fc])
-        names.extend(['rnn', 'fc'])
+        names.extend(['conv', 'fc'])    # 'conv' is not a bug. For compatibility, we continue to use it. 
+                                        # If you want to use our pretrained model, please don't change this.
         train_flags.extend([train_rnn, True])
 
         self.register_nets(nets, names, train_flags)

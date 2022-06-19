@@ -38,12 +38,26 @@ class SketchRNNRunner(BaseRunner):
         return arg_parser
 
     def prepare_dataset(self):
-        train_data = {
-            m: QuickDrawDataset(
-                m,
-                self.config['data_seq_dir']
-            ) for m in self.modes
-        }
+        if ('robustness_experiment' in self.config.keys() and self.config['robustness_experiment']):
+            train_data = {
+                m : QuickDrawDataset(
+                    mode=m,
+                    data_seq_dir=self.config['data_seq_dir'],
+                    stroke_removal_prob=self.config['stroke_removal_prob'],
+                    do_augmentation=False,
+                    robustness_experiment=True,
+                    require_img=False,
+                    scale_factor_rexp=self.config['scale_factor'],
+                    rot_thresh_rexp=self.config['rot_thresh_rexp']
+                ) for m in self.modes
+            }
+        else:
+            train_data = {
+                m: QuickDrawDataset(
+                    m,
+                    self.config['data_seq_dir']
+                ) for m in self.modes
+            }
         return train_data
 
     def create_data_loaders(self, dataset_dict):

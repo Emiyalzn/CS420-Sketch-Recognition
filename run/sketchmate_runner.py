@@ -17,8 +17,9 @@ from .base_runner import BaseRunner
 from utils.utils import fix_seed
 
 class SketchMateRunner(BaseRunner):
-    def __init__(self, args=None):
-        local_dir = os.path.join("results", f'sketchmate-{datetime.now().strftime("%Y%m%d-%H%M%S")}')
+    def __init__(self, args=None, local_dir=None):
+        if local_dir is None:
+            local_dir = os.path.join("results", f'sketchmate-{datetime.now().strftime("%Y%m%d-%H%M%S")}')
         super(SketchMateRunner, self).__init__(local_dir, args)
 
         self.transform = transforms.Resize(CNN_IMAGE_SIZES[self.config['cnn_fn']])
