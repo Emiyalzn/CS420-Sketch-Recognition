@@ -343,6 +343,6 @@ class Trans2CNN(BaseModel):
         if images.size(1) == 1:
             images = images.repeat(1, 3, 1, 1)
         cnnfeats = self.cnn(images) # (batch_size, feat_dim)
-        cnnfeats = self.fc(cnnfeats)
+        # cnnfeats = self.fc(cnnfeats)
 
         return cnnfeats

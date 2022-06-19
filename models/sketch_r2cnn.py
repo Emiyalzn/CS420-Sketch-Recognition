@@ -126,6 +126,6 @@ class SketchR2CNN(BaseModel):
         if images.size(1) == 1:
             images = images.repeat(1, 3, 1, 1)
         cnnfeat = self.cnn(images)
-        cnnfeat = self.fc(cnnfeat)
+        # cnnfeat = self.fc(cnnfeat)
         
         return cnnfeat

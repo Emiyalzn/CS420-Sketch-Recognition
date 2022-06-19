@@ -31,7 +31,7 @@ class SketchR2CNNRunner(BaseRunner):
         # If `intensity_channels` in {1, 3} then can convert it to 3-channel
         # and the model can remain unchanged.
         # Otherwise the first conv layer should be reconstructed.
-        arg_parser.add_argument('--model_fn', type=str, default='resnet50')
+        arg_parser.add_argument('--model_fn', type=str, default='efficientnet_b0')
         
         arg_parser.add_argument('--paddingLength', type=int, default=226)
         arg_parser.add_argument('--random_scale_factor', type=float, default=0.0)
@@ -40,7 +40,7 @@ class SketchR2CNNRunner(BaseRunner):
         arg_parser.add_argument('--img_rotate_angle', type=float, default=0.0)
         arg_parser.add_argument('--img_translate_dist', type=float, default=0.0)
         
-        arg_parser.add_argument('--disable_augmentation', action='store_false')
+        arg_parser.add_argument('--do_augmentation', action='store_true')
         
         return arg_parser
 
@@ -49,7 +49,7 @@ class SketchR2CNNRunner(BaseRunner):
             m: QuickDrawDataset(
                 mode=m,
                 data_seq_dir=self.config['data_seq_dir'],
-                disable_augmentation=self.config['disable_augmentation'],
+                do_augmentation=self.config['do_augmentation'],
             ) for m in self.modes
         }
         return train_data

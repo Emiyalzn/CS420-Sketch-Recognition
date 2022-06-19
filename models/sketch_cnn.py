@@ -41,6 +41,6 @@ class SketchCNN(BaseModel):
     
     def embed(self, images):
         cnnfeat = self.cnn(images)
-        cnnfeat = self.fc(cnnfeat)
+        # cnnfeat = self.fc(cnnfeat)
 
         return cnnfeat
