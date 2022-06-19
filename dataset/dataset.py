@@ -13,7 +13,11 @@ from copy import deepcopy
 from torchvision import transforms
 
 import dataset.data_utils as utils
-from dataset.data_utils import random_affine_transform, seqlen_remove_points
+from dataset.data_utils import random_affine_transform, seqlen_remove_points, random_remove_strokes, random_drop_strokes
+from utils.seq2png import draw_strokes
+import cairosvg
+import matplotlib.pyplot as plt
+from PIL import Image
 
 class QuickDrawDataset(Dataset):
     mode_indices = {'train': 0, 'valid': 1, 'test':2}
@@ -23,12 +27,27 @@ class QuickDrawDataset(Dataset):
                  data_seq_dir,
                  stroke_removal_prob = 0.15,
                  do_augmentation = False,
+                 robustness_experiment: bool=False,
+                 require_img: bool=False,
+                 scale_factor_rexp: float=0.1,
+                 rot_thresh_rexp: float=20.0
                  ):
         self.root_dir = data_seq_dir
         self.mode = mode
         self.data = None
         self.stroke_removal_prob = stroke_removal_prob
         self.do_augmentation = do_augmentation
+        
+        self.robustness_experiment = robustness_experiment
+        self.scale_factor_rexp = scale_factor_rexp
+        self.rot_thresh_rexp = rot_thresh_rexp
+        self.require_img = require_img
+        
+        if (do_augmentation):
+            print('[!] Will do augmentation.')
+        
+        if self.robustness_experiment:
+            print(f"Performing robustness experiment.")
 
         with open(osp.join(self.root_dir, 'categories.pkl'), 'rb') as fh:
             saved_pkl = pickle.load(fh)
@@ -40,7 +59,7 @@ class QuickDrawDataset(Dataset):
     def __len__(self):
         return len(self.indices)
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx, width=28):
         if self.data is None:
             self.data = h5py.File(osp.join(self.root_dir, 'quickdraw_{}.hdf5'.format(self.mode)), 'r')
 
@@ -51,9 +70,27 @@ class QuickDrawDataset(Dataset):
 
         sid_points = np.array(self.data[sketch_path][()], dtype=np.float32)
 
-        if self.do_augmentation and self.mode == 'train':
+        if (self.do_augmentation and self.mode == 'train'):
             sid_points[:,:2] = random_affine_transform(sid_points[:,:2])
             sid_points = seqlen_remove_points(sid_points, self.stroke_removal_prob)
+
+        if (self.robustness_experiment):
+            sid_points[:,:2] = random_affine_transform(sid_points[:,:2],
+                                                       scale_factor=self.scale_factor_rexp,
+                                                       rot_thresh=self.rot_thresh_rexp)
+            sid_points = random_drop_strokes(sid_points, self.stroke_removal_prob)
+
+        img = 0
+        if (self.require_img):
+            seq = np.concatenate([sid_points[[0], :], np.diff(sid_points, axis=0)])
+            draw_strokes(seq, f'./tmp.svg', width=width)
+            with open(f'./tmp.svg', 'r') as f_in:
+                svg = f_in.read()
+                f_in.close()
+            cairosvg.svg2png(bytestring=svg, write_to=f'./tmp.png')
+            img = np.array(Image.open('./tmp.png'))[:, :, 0].reshape(1, width, width).astype(dtype=np.float32, order='A', copy=False) / 255.0
+            
+            return 0, 0, 0, img, cid
 
         sample = {'points3': sid_points, 'category': cid}
         return sample
@@ -196,7 +233,7 @@ def r2cnn_collate(batch):
         intensities = np.zeros((max_length,), np.float32)
         intensities[:points3_length] = 1.0 - np.arange(points3_length, dtype=np.float32) / float(points3_length - 1)
         intensities_list.append(intensities)
-
+        
         category_list.append(item['category'])
 
     batch_padded = {
@@ -232,7 +269,8 @@ class SketchDataset(Dataset):
                  img_scale_ratio: float=1.0,        # min randomly scaled ratio (for sequences) [0, 1]
                  img_rotate_angle: float=0.0,       # max randomly rotate angle (for images) (in absolute value, degree)
                  img_translate_dist: float=0.0,     # max randomly translate distance (for images) (in absolute value, pixel)
-                 disable_augmentation: bool=False   #! Whether to disable all augmentations
+                 disable_augmentation: bool=False,   #! Whether to disable all augmentations
+                 robustness_experiment: bool=False
                  ):
         super(SketchDataset, self).__init__()
         
@@ -247,9 +285,13 @@ class SketchDataset(Dataset):
         self.img_rotate_angle = img_rotate_angle
         self.img_translate_dist = img_translate_dist
         self.disable_augmentation = disable_augmentation
+        self.robustness_experiment = robustness_experiment
         
         if self.disable_augmentation:
             print(f"Data augmentation is disabled.")
+        
+        if self.robustness_experiment:
+            print(f"Performing robustness experiment.")
         
         # self.seqs = None
         # self.imgs = None
@@ -312,11 +354,26 @@ class SketchDataset(Dataset):
 
     def __getitem__(self, index):
         # Sequence
+        if (self.robustness_experiment):
+            data = self.seqs[index].astype(dtype=np.double, order='A', copy=False)
+            data_quickdraw = np.cumsum(data, axis=0)
+            data_removed = random_drop_strokes(data_quickdraw, self.stroke_removal_prob)
+            data_sketchnet = np.concatenate([data_removed[[0], :], np.diff(data_removed, axis=0)])
+            
+            draw_strokes(data_sketchnet, f'./tmp.svg', width=28)
+            with open(f'./tmp.svg', 'r') as f_in:
+                svg = f_in.read()
+                f_in.close()
+            cairosvg.svg2png(bytestring=svg, write_to=f'./tmp.png')
+            label = self.labels[index]
+            img = np.array(Image.open('./tmp.png'))
+            return img, label
+        
         if self.seqs is not None:
             data = self.seqs[index].astype(dtype=np.double, order='A', copy=False)
             
             # Sequence Augmentation
-            if not self.disable_augmentation and self.mode == 'train':
+            if (not self.disable_augmentation and self.mode == 'train'):
                 data = self.random_scale_seq(self.seqs[index])
                 if self.stroke_removal_prob > 0:
                     data = self.stroke_removal(data, self.stroke_removal_prob)

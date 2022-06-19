@@ -14,7 +14,7 @@ from torch.optim import lr_scheduler
 from datetime import datetime
 import ast
 
-from dataset.dataset import SketchDataset
+from dataset.dataset import QuickDrawDataset, SketchDataset
 from models.cnnmodels import CNN_MODELS, CNN_IMAGE_SIZES
 from models.sketch_cnn import SketchCNN
 from utils.utils import fix_seed
@@ -51,21 +51,35 @@ class SketchCNNRunner(BaseRunner):
         return arg_parser
 
     def prepare_dataset(self):
-        train_data = {
-            m: SketchDataset(
-                mode=m,
-                data_seq_dir=self.config['data_seq_dir'],
-                data_img_dir=self.config['data_img_dir'],
-                categories=self.config['categories'],
-                paddingLength=self.config['paddingLength'],
-                random_scale_factor=self.config['random_scale_factor'],
-                stroke_removal_prob=self.config['stroke_removal_prob'],
-                img_scale_ratio=self.config['img_scale_ratio'],
-                img_rotate_angle=self.config['img_rotate_angle'],
-                img_translate_dist=self.config['img_translate_dist'],
-                disable_augmentation=self.config['disable_augmentation']
-            ) for m in self.modes
-        }
+        if ('robustness_experiment' in self.config.keys() and self.config['robustness_experiment']):
+            train_data = {
+                m : QuickDrawDataset(
+                    mode=m,
+                    data_seq_dir=self.config['data_seq_dir'],
+                    stroke_removal_prob=self.config['stroke_removal_prob'],
+                    do_augmentation=False,
+                    robustness_experiment=True,
+                    require_img=True,
+                    scale_factor_rexp=self.config['scale_factor'],
+                    rot_thresh_rexp=self.config['rot_thresh_rexp']
+                ) for m in self.modes
+            }
+        else:
+            train_data = {
+                m: SketchDataset(
+                    mode=m,
+                    data_seq_dir=self.config['data_seq_dir'],
+                    data_img_dir=self.config['data_img_dir'],
+                    categories=self.config['categories'],
+                    paddingLength=self.config['paddingLength'],
+                    random_scale_factor=self.config['random_scale_factor'],
+                    stroke_removal_prob=self.config['stroke_removal_prob'],
+                    img_scale_ratio=self.config['img_scale_ratio'],
+                    img_rotate_angle=self.config['img_rotate_angle'],
+                    img_translate_dist=self.config['img_translate_dist'],
+                    disable_augmentation=self.config['disable_augmentation']
+                ) for m in self.modes
+            }
         return train_data
 
     def create_data_loaders(self, dataset_dict):

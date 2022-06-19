@@ -1,4 +1,5 @@
 import argparse
+from asyncio.log import logger
 import json
 import numpy as np
 import os
@@ -38,8 +39,9 @@ class BaseRunner(object):
         self.local_dir = local_dir
         self.model_dir = os.path.join(local_dir, "model")
         os.makedirs(self.model_dir, exist_ok=True)
-        self.logger = Logger.init_logger(filename=local_dir + f'/_output_{datetime.now().strftime("%Y%m%d-%H%M%S")}.log')
+        self.logger = Logger.init_logger(filename=os.path.join(local_dir, f'_output_{datetime.now().strftime("%Y%m%d-%H%M%S")}.log'))
         args_print(self.config, self.logger)
+        print(os.path.join(local_dir, f'_output_{datetime.now().strftime("%Y%m%d-%H%M%S")}.log'))
 
     def __enter__(self):
         return self
@@ -66,7 +68,7 @@ class BaseRunner(object):
         # Added for compatibility
         arg_parser.add_argument('--ckpt_nets', nargs='*')
         arg_parser.add_argument('--ckpt_prefix', type=str, default=None)
-
+        
         arg_parser = self.add_args(arg_parser)
         
         config = vars(arg_parser.parse_args(args))
@@ -89,7 +91,7 @@ class BaseRunner(object):
 
     def prepare_dataset(self):
         raise NotImplementedError
-
+    
     def create_model(self, num_categories):
         raise NotImplementedError
 
@@ -222,7 +224,12 @@ class BaseRunner(object):
             # initialize network
             net = self.create_model(num_categories)
             path_prefix = os.path.join(self.model_dir, f'_iter_best_{seed}')
-            net.load(path_prefix)
+            
+            try:
+                net.load(path_prefix)
+            except:
+                self.logger.info(f'Loading {self.model_dir} with seed {seed} failed. Skip.')
+                continue
 
             self.logger.info(f"Read model of seed {seed}.")
             fix_seed(seed)
@@ -245,7 +252,8 @@ class BaseRunner(object):
 
                         logits, _, gt_category = self.forward_batch(net, data_batch, mode, BaseRunner.DummyOptimizer(), lambda _1, _2: 0)
                         _, predicts = torch.max(logits, 1)
-                        confusion_matrix[gt_category, predicts] += 1
+                        for i in range(gt_category.shape[0]):
+                            confusion_matrix[gt_category[i], predicts[i]] += 1
                         # predicts_accu = torch.sum(predicts == gt_category)
                         running_corrects = compute_running_corrects(logits, gt_category, (1, 5))
                         running_corrects_top1 += running_corrects[1]
@@ -261,10 +269,11 @@ class BaseRunner(object):
                     epoch_acc_5 = float(running_corrects_top5) / float(num_samples)
                     self.logger.info(f"{mode}:\tTop1-Accuracy: {epoch_acc_1:.4f} | Top5-Accuracy: {epoch_acc_5:.4f}")
                     
+                    self.logger.info(f'{mode}: Accuracy computed with conf-mat: {torch.sum(torch.diagonal(confusion_matrix))/torch.sum(confusion_matrix):.4f}')
                     for i, k in enumerate(self.config['categories']):
                         TP = confusion_matrix[i, i]
-                        TN = torch.sum(confusion_matrix[:i, :i]) + torch.sum(confusion_matrix[:i, i+1:]) \
-                        + torch.sum(confusion_matrix[i+1:, :i]) + torch.sum(confusion_matrix[i+1:, i+1:])
+                        # TN = torch.sum(confusion_matrix[:i, :i]) + torch.sum(confusion_matrix[:i, i+1:]) \
+                        # + torch.sum(confusion_matrix[i+1:, :i]) + torch.sum(confusion_matrix[i+1:, i+1:])
                 
                         T = torch.sum(confusion_matrix[i])    # = TP + FN
                         P = torch.sum(confusion_matrix[:, i]) # = TP + FP
@@ -272,17 +281,111 @@ class BaseRunner(object):
                         FN = T - TP
                         FP = P - TP
                         
-                        accuracy = (TP + TN) / (TP + FN + FP + TN)
                         precision = TP / (TP + FP)
                         recall = TP / (TP + FN)
                         f1 = 2 * precision * recall / (precision + recall)
                         
-                        self.logger.info(f'{mode}-{k}: Accuracy: {accuracy} | Precision: {precision} | Recall: {recall} | F1: {f1}')
+                        self.logger.info(f'{mode}-{k}: Precision: {precision:.4f} | Recall: {recall:.4f} | F1: {f1:.4f}')
                     np.save(os.path.join(self.local_dir, f"confusion_matrix_{mode}_{seed}.npy"), confusion_matrix.cpu().numpy())
 
         for m in self.modes:
             test_data[m].dispose()
 
+    def robustness_experiment(self, modes=['test'], stroke_removal_probs=[0.0], stroke_deformation_settings=[(0.0, 0.0)]):
+        # During evaluate(), 'test' datasets are required
+        self.modes = modes
+
+        self.config['robustness_experiment'] = True
+        
+        params = [(prob, 0.0, 0.0) for prob in stroke_removal_probs] + \
+                 [(0.0, scale_factor_rexp, rot_thresh_rexp) for (scale_factor_rexp, rot_thresh_rexp) in stroke_deformation_settings]
+
+        for (stroke_removal_prob, scale_factor_rexp, rot_thresh_rexp) in params:
+            print(f'Evaluating: {stroke_removal_prob} | {scale_factor_rexp} | {rot_thresh_rexp}')
+            self.config['stroke_removal_prob'] = stroke_removal_prob
+            self.config['scale_factor'] = scale_factor_rexp
+            self.config['rot_thresh_rexp'] = rot_thresh_rexp
+            
+            test_data = self.prepare_dataset()
+            num_categories = len(self.config['categories'])
+            self.logger.info(f"Number of categories: {num_categories}")
+            
+            data_loaders = self.create_data_loaders(test_data)
+
+            for seed in self.config['seed']:
+                # initialize network
+                net = self.create_model(num_categories)
+                path_prefix = os.path.join(self.model_dir, f'_iter_best_{seed}')
+                
+                try:
+                    net.load(path_prefix)
+                except:
+                    self.logger.info(f'Loading {self.model_dir} with seed {seed} failed. Skip.')
+                    continue
+
+                self.logger.info(f"Read model of seed {seed}.")
+                fix_seed(seed)
+
+                self.logger.info('-' * 20)
+
+                # self.modes = ['test']
+                with torch.no_grad():
+                    for mode in self.modes:
+                        self.logger.info(f"Start {mode} mode.")
+                        net.eval_mode()
+                        
+                        confusion_matrix = torch.zeros((num_categories, num_categories), dtype=torch.int)
+                        running_corrects_top1 = 0
+                        running_corrects_top5 = 0
+                        num_samples = 0
+                        pbar = tqdm.tqdm(total=len(data_loaders[mode]))
+                        for bid, data_batch in enumerate(data_loaders[mode]):
+                            # self.step_counters[mode] += 1
+
+                            logits, _, gt_category = self.forward_batch(net, data_batch, mode, BaseRunner.DummyOptimizer(), lambda _1, _2: 0)
+                            _, predicts = torch.max(logits, 1)
+                            for i in range(gt_category.shape[0]):
+                                confusion_matrix[gt_category[i], predicts[i]] += 1
+                            # predicts_accu = torch.sum(predicts == gt_category)
+                            running_corrects = compute_running_corrects(logits, gt_category, (1, 5))
+                            running_corrects_top1 += running_corrects[1]
+                            running_corrects_top5 += running_corrects[5]
+
+                            sampled_batch_size = gt_category.size(0)
+                            num_samples += sampled_batch_size
+                            pbar.set_description(f'{float(running_corrects_top1/num_samples):.4f} | {float(running_corrects_top5/num_samples):.4f}')
+                            pbar.update()
+                        pbar.close()
+
+                        epoch_acc_1 = float(running_corrects_top1) / float(num_samples)
+                        epoch_acc_5 = float(running_corrects_top5) / float(num_samples)
+                        self.logger.info(f"{mode}:\tTop1-Accuracy: {epoch_acc_1:.4f} | Top5-Accuracy: {epoch_acc_5:.4f}")
+                        
+                        self.logger.info(f'{mode}: Accuracy computed with conf-mat: {torch.sum(torch.diagonal(confusion_matrix))/torch.sum(confusion_matrix):.4f}')
+                        for i, k in enumerate(self.config['categories']):
+                            TP = confusion_matrix[i, i]
+                            # TN = torch.sum(confusion_matrix[:i, :i]) + torch.sum(confusion_matrix[:i, i+1:]) \
+                            # + torch.sum(confusion_matrix[i+1:, :i]) + torch.sum(confusion_matrix[i+1:, i+1:])
+                    
+                            T = torch.sum(confusion_matrix[i])    # = TP + FN
+                            P = torch.sum(confusion_matrix[:, i]) # = TP + FP
+                            
+                            FN = T - TP
+                            FP = P - TP
+                            
+                            precision = TP / (TP + FP)
+                            recall = TP / (TP + FN)
+                            f1 = 2 * precision * recall / (precision + recall)
+                            
+                        self.logger.info(f'{mode}: Precision: {precision.mean():.4f} | Recall: {recall.mean():.4f} | F1: {f1.mean():.4f}')
+                        np.save(os.path.join(self.local_dir, f"confusion_matrix_{mode}_{seed}_{stroke_removal_prob}_{scale_factor_rexp}_{rot_thresh_rexp}.npy"), confusion_matrix.cpu().numpy())
+
+            for m in self.modes:
+                test_data[m].dispose()
+        
+        self.config['robustness_experiment'] = False
+        
+        # During visualize(), 'test' datasets are required
     def visualize_emb(self,
                       modes=['test'],
                       categories=['bear', 'cat', 'crocodile', 'elephant', 'giraffe'],

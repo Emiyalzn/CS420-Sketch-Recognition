@@ -297,14 +297,14 @@ class Trans2CNN(BaseModel):
         :param expected_len: expected length as if input sketch is known (will be ignored if blind_decoder_mask=True
         :return: dict of relevant outputs
         """
-        decoder_input = torch.tensor([0., 0., 1., 0., 0.])
-        output = torch.ones((cnnfeats.shape[0], 1, 5)) * decoder_input
+        decoder_input = torch.tensor([0., 0., 1., 0., 0.], device=cnnfeats.device)
+        output = torch.ones((cnnfeats.shape[0], 1, 5), device=cnnfeats.device) * decoder_input
 
         for i in range(self.max_seq_len):
             nattn = expected_len if expected_len is not None else i + 1
 
             enc_input_dummy = self.make_dummy_input(
-                nattn=nattn, batch_size=cnnfeats.shape[0])
+                nattn=nattn, batch_size=cnnfeats.shape[0]).to(device=cnnfeats.device)
             enc_padding_mask, combined_mask, dec_padding_mask = create_masks(
                 enc_input_dummy, output)
             
@@ -314,8 +314,9 @@ class Trans2CNN(BaseModel):
             # predictions.shape == (batch_size, seq_len, vocab_size)
             # res = self.decode(cnnfeats, output, dec_padding_mask, combined_mask, False)
             pre_decoder = self.expand_layer(cnnfeats)
-            dec_output, _ = self.decoder(output, pre_decoder, False, combined_mask, dec_padding_mask)
-            res = self.output_layer(dec_output)
+            dec_output, _ = self.decoder(output, pre_decoder, False, combined_mask.to(device=cnnfeats.device), dec_padding_mask.to(device=cnnfeats.device))
+            # res = self.output_layer(dec_output)
+            res = dec_output
             
             # select the last word from the seq_len dimension
             predicted = res[:, -1:, ...]  # (batch_size, 1, vocab_size)
