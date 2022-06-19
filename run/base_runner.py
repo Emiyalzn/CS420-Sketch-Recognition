@@ -25,12 +25,14 @@ from matplotlib.colors import ListedColormap,LinearSegmentedColormap
 from utils.seq2png import draw_strokes
 import cairosvg
 from PIL import Image
-import datetime
+from datetime import datetime
+import seaborn as sns
+import pandas as pd
 
 
 class BaseRunner(object):
     def __init__(self, local_dir, args=None):
-        if (args is not None):
+        if args is not None:
             self.config = self._parse_args(args)
         else:
             self.config = self._parse_args()
@@ -286,319 +288,402 @@ class BaseRunner(object):
         for m in self.modes:
             test_data[m].dispose()
 
-    def visualize_feat(self,
-                  modes=['test'],
-                  categories=None,
-                  num_per_categories=100,
-                  img_size=0.025,
-                  width=28,
-                  figsize=(48, 27),
-                  colors = ['#d53e4f', '#f46d43', '#fdae61', '#fee08b',
-                            '#e6f598', '#abdda4', '#66c2a5', '#3288bd',]):
-        cmaps = [
-            LinearSegmentedColormap.from_list(f'sketch_{i}', ['white', color]) for i, color in enumerate(colors)
-        ]
-        
-        # During visualize(), 'test' datasets are required
+    def visualize_emb(self,
+                      modes=['test'],
+                      categories=['bear', 'cat', 'crocodile', 'elephant', 'giraffe'],
+                      seed=42,
+                      num_per_categories=200):
         self.modes = modes
 
         test_data = self.prepare_dataset()
         num_categories = len(self.config['categories'])
         self.logger.info(f"Number of categories: {num_categories}")
-        
+
         data_loaders = self.create_data_loaders(test_data)
 
-        for seed in self.config['seed']:
-            # Temporarily use user-specific categories.
-            categories_backup = self.config['categories']
-            if (categories is not None):
-                self.config['categories'] = categories
-            else:
-                categories = self.config['categories']
-            
-            # initialize network
-            net = self.create_model(num_categories)
-            path_prefix = os.path.join(self.model_dir, f'_iter_best_{seed}')
-            net.load(path_prefix)
+        # initialize network
+        net = self.create_model(num_categories)
+        path_prefix = os.path.join(self.model_dir, f'_iter_best_{seed}')
+        net.load(path_prefix)
 
-            self.logger.info(f"Read model of seed {seed}.")
-            fix_seed(seed)
+        self.logger.info(f"Read model of seed {seed}.")
+        fix_seed(seed)
 
-            self.logger.info('-' * 20)
+        self.logger.info('-' * 20)
+        with torch.no_grad():
+            for mode in self.modes:
+                self.logger.info(f"Start {mode} mode.")
+                net.eval_mode()
 
-            # self.modes = ['test']
-            with torch.no_grad():
-                for mode in self.modes:
-                    self.logger.info(f"Start {mode} mode.")
-                    net.eval_mode()
+                samples = dict()
+                pbar = tqdm.tqdm(total=len(data_loaders[mode]))
 
-                    samples = dict()
-                    pbar = tqdm.tqdm(total=len(data_loaders[mode]))
-                    
-                    for _, data_batch in enumerate(data_loaders[mode]):
-                        # self.step_counters[mode] += 1
+                for _, data_batch in enumerate(data_loaders[mode]):
+                    # self.step_counters[mode] += 1
 
-                        feats_batch, categories_batch = self.embed_batch(net, data_batch)
-                        feats_batch = feats_batch.cpu().numpy()
-                        categories_batch = categories_batch.cpu().numpy()
-                        
-                        for i in range(len(feats_batch)):
-                            if (categories_batch[i] not in samples.keys()):
-                                samples[categories_batch[i]] = [[], []]
-                            if (len(samples[categories_batch[i]][0])) < num_per_categories:
-                                samples[categories_batch[i]][0].append(feats_batch[i])
-                                
-                                cur_img = None
-                                if (isinstance(data_batch, dict)):  # QuickDrawDataset
-                                    cur_seq = data_batch['points3'][i].cpu().numpy()
-                                    # import pdb; pdb.set_trace()
-                                    cur_seq = np.concatenate([cur_seq[[0], :], np.diff(cur_seq, axis=0)], axis=0)
-                                    
-                                    draw_strokes(cur_seq, os.path.join(self.local_dir, 'tmp.svg'), width=width)
-                                    with open(os.path.join(self.local_dir, 'tmp.svg'), 'r') as f_in:
-                                        svg = f_in.read()
-                                        f_in.close()
-                                    cairosvg.svg2png(bytestring=svg, write_to=os.path.join(self.local_dir, 'tmp.png'))
-                                    cur_img = np.array(Image.open(os.path.join(self.local_dir, 'tmp.png'))) / 255.0
-                                    cur_img = np.sum(cur_img, axis=-1)
-                                    # import pdb; pdb.set_trace()
-                                    
-                                elif (isinstance(data_batch, list)): # SketchDataset
-                                    cur_img = data_batch[3][i, 0, :, :].cpu().numpy()
-                                else:
-                                    raise NotImplementedError(f'Unexpected type of `data_batch`: {type(data_batch)}')
-                                samples[categories_batch[i]][1].append(cur_img)
+                    feats_batch, categories_batch = self.embed_batch(net, data_batch)
+                    feats_batch = feats_batch.cpu().numpy()
+                    categories_batch = categories_batch.cpu().numpy()
 
-                        pbar.update()
-                    pbar.close()
-                    
-                    # np.save(os.path.join(self.local_dir, f"feats_samples_{mode}_{seed}.npy"), samples, allow_pickle=True)
-                    
-                    feats = np.concatenate([samples[i][0] for i in range(len(categories))])
-                    
-                    warnings.simplefilter('ignore', FutureWarning)
-                    tsne = TSNE(n_components=2,
-                        verbose=False, perplexity=30,
-                        n_iter=1000,
-                        init="pca",
-                        learning_rate='auto',
-                        method='barnes_hut',
-                        random_state=42)
-                    
-                    feats_reduced = tsne.fit_transform(feats)
-                    
-                    feats_normed = (feats_reduced - feats_reduced.min(axis=0, keepdims=True)) / (feats_reduced.max(axis=0, keepdims=True) - feats_reduced.min(axis=0, keepdims=True))
-                    feats_normed = feats_normed * (1 - 2*img_size) + img_size
-                    
-                    feats_per_category = np.split(feats_normed, len(categories))
-                    for i in range(len(categories)):
-                        samples[i][0] = feats_per_category[i]
-                    
-                    fig = plt.figure(figsize=figsize)
-                    
-                    # White background.
-                    # Removing this code can result in a transparent background.
-                    bg = fig.add_axes([0, 0, 1, 1])
-                    bg.set_xticks([])
-                    bg.set_yticks([])
-                    bg.axis('off')
-                    
-                    # Scatter graph
-                    ax = fig.add_axes([0.75, 0, 0.25, 0.25])
-                    ax.set_xticks([])
-                    ax.set_yticks([])
-                    
-                    # Visualization of each small picture
-                    axs = []
+                    for i in range(len(feats_batch)):
+                        if categories_batch[i] not in samples.keys():
+                            samples[categories_batch[i]] = []
+                        if len(samples[categories_batch[i]]) < num_per_categories:
+                            samples[categories_batch[i]].append(feats_batch[i])
 
-                    for k, v in samples.items():
-                        if (k >= len(categories)):
-                            continue
-                        cmap = cmaps[k % len(cmaps)]
-                        color = cmap(1.0)
-                        label = categories[k]
-                        xs = v[0][:, 0]
-                        ys = v[0][:, 1]
-                        imgs = v[1]
-                        
-                        # import pdb; pdb.set_trace()
-                        if (len(xs) != len(imgs)):
-                            import pdb; pdb.set_trace()
+                    pbar.update()
+                pbar.close()
 
-                        ax.scatter(xs, ys, c=[color] * len(xs), label=label)
+                feats = np.concatenate([samples[i] for i in range(len(categories))])
+                warnings.simplefilter('ignore', FutureWarning)
 
-                        for i, img in enumerate(imgs):
-                            ax_img = fig.add_axes([xs[i]+img_size/2, ys[i]+img_size/2, img_size, img_size])
-                            ax_img.imshow(-img+1.0, cmap=cmap)
-                            ax_img.axis('off')
-                            axs.append(ax_img)
+                fig = plt.figure(figsize=(4.5, 4.5))
 
-                    ax.legend()
+                tsne = TSNE(perplexity=50,
+                            verbose=False,
+                            n_components=2,
+                            init='pca',
+                            early_exaggeration=12,
+                            learning_rate=1000,
+                            n_iter=3000)
 
-                    np.save(os.path.join(self.local_dir, f"feats_samples_processed_{mode}_{seed}.npy"), samples, allow_pickle=True)
-                    plt.savefig(os.path.join(self.local_dir, f'feats_tsne_{mode}_{seed}.png'))
+                feature_2d = tsne.fit_transform(feats)
+                x_min, x_max = np.min(feature_2d, 0), np.max(feature_2d, 0)
+                feature_2d = (feature_2d - x_min) / (x_max - x_min)
+                labels = np.concatenate([[category for _ in range(num_per_categories)] for category in categories])
 
-            self.config['categories'] = categories_backup
-                    
-        for m in self.modes:
-            test_data[m].dispose()
-        
-        # Restore from backup
-        
-    def visualize_logit(self,
-                  modes=['test'],
-                  categories=None,
-                  num_per_categories=100,
-                  img_size=0.025,
-                  figsize=(48, 27),
-                  colors = ['#d53e4f', '#f46d43', '#fdae61', '#fee08b',
-                            '#e6f598', '#abdda4', '#66c2a5', '#3288bd',]):
-        cmaps = [
-            LinearSegmentedColormap.from_list(f'sketch_{i}', ['white', color]) for i, color in enumerate(colors)
-        ]
-        
-        # During visualize(), 'test' datasets are required
-        self.modes = modes
+                df = pd.DataFrame()
+                df['pca-one'] = feature_2d[:, 0]
+                df['pca-two'] = feature_2d[:, 1]
+                df['label'] = labels
 
-        test_data = self.prepare_dataset()
-        num_categories = len(self.config['categories'])
-        self.logger.info(f"Number of categories: {num_categories}")
-        
-        data_loaders = self.create_data_loaders(test_data)
+                sns.scatterplot(
+                    x='pca-one', y='pca-two',
+                    hue='label',
+                    palette=sns.color_palette("hls", len(categories)),
+                    data=df,
+                    legend="full",
+                    alpha=0.7
+                )
 
-        for seed in self.config['seed']:
-            # Temporarily use user-specific categories.
-            categories_backup = self.config['categories']
-            if (categories is not None):
-                self.config['categories'] = categories
-            else:
-                categories = self.config['categories']
-            
-            # initialize network
-            net = self.create_model(num_categories)
-            path_prefix = os.path.join(self.model_dir, f'_iter_best_{seed}')
-            net.load(path_prefix)
+                plt.xlabel("")
+                plt.ylabel("")
+                fig.tight_layout()
+                fig.savefig(os.path.join(self.local_dir, f"tsne_{seed}.pdf"))
 
-            self.logger.info(f"Read model of seed {seed}.")
-            fix_seed(seed)
 
-            self.logger.info('-' * 20)
-
-            # self.modes = ['test']
-            with torch.no_grad():
-                for mode in self.modes:
-                    self.logger.info(f"Start {mode} mode.")
-                    net.eval_mode()
-
-                    samples = dict()
-                    pbar = tqdm.tqdm(total=len(data_loaders[mode]))
-                    
-                    for _, data_batch in enumerate(data_loaders[mode]):
-                        # self.step_counters[mode] += 1
-
-                        feats_batch, categories_batch = self.embed_batch(net, data_batch)
-                        feats_batch = feats_batch.cpu().numpy()
-                        categories_batch = categories_batch.cpu().numpy()
-                        
-                        for i in range(len(feats_batch)):
-                            if (categories_batch[i] not in samples.keys()):
-                                samples[categories_batch[i]] = [[], []]
-                            if (len(samples[categories_batch[i]][0])) < num_per_categories:
-                                samples[categories_batch[i]][0].append(feats_batch[i])
-                                
-                                # cur_img = None
-                                # if (isinstance(data_batch, dict)):  # QuickDrawDataset
-                                #     cur_seq = data_batch['points3'][i].cpu().numpy()
-                                #     # import pdb; pdb.set_trace()
-                                #     cur_seq = np.concatenate([cur_seq[[0], :], np.diff(cur_seq, axis=0)], axis=0)
-                                    
-                                #     draw_strokes(cur_seq, os.path.join(self.local_dir, 'tmp.svg'), width=224)
-                                #     with open(os.path.join(self.local_dir, 'tmp.svg'), 'r') as f_in:
-                                #         svg = f_in.read()
-                                #         f_in.close()
-                                #     cairosvg.svg2png(bytestring=svg, write_to=os.path.join(self.local_dir, 'tmp.png'))
-                                #     cur_img = np.array(Image.open(os.path.join(self.local_dir, 'tmp.png'))) / 255.0
-                                #     cur_img = np.sum(cur_img, axis=-1)
-                                #     # import pdb; pdb.set_trace()
-                                    
-                                # elif (isinstance(data_batch, list)): # SketchDataset
-                                #     cur_img = data_batch[3][i, 0, :, :].cpu().numpy()
-                                # else:
-                                #     raise NotImplementedError(f'Unexpected type of `data_batch`: {type(data_batch)}')
-                                # samples[categories_batch[i]][1].append(cur_img)
-
-                        pbar.update()
-                    pbar.close()
-                    
-                    # np.save(os.path.join(self.local_dir, f"samples_{mode}_{seed}.npy"), samples, allow_pickle=True)
-                    
-                    feats = np.concatenate([samples[i][0] for i in range(len(categories))])
-                    
-                    warnings.simplefilter('ignore', FutureWarning)
-                    tsne = TSNE(n_components=2,
-                        verbose=False, perplexity=30,
-                        n_iter=1000,
-                        init="pca",
-                        learning_rate='auto',
-                        method='barnes_hut',
-                        random_state=42)
-                    
-                    feats_reduced = tsne.fit_transform(feats)
-                    
-                    feats_normed = (feats_reduced - feats_reduced.min(axis=0, keepdims=True)) / (feats_reduced.max(axis=0, keepdims=True) - feats_reduced.min(axis=0, keepdims=True))
-                    feats_normed = feats_normed * (1 - 2*img_size) + img_size
-                    
-                    feats_per_category = np.split(feats_normed, len(categories))
-                    for i in range(len(categories)):
-                        samples[i][0] = feats_per_category[i]
-                    
-                    fig = plt.figure(figsize=figsize)
-                    
-                    # White background.
-                    # Removing this code can result in a transparent background.
-                    # bg = fig.add_axes([0, 0, 1, 1])
-                    # bg.set_xticks([])
-                    # bg.set_yticks([])
-                    # bg.axis('off')
-                    
-                    # Scatter graph
-                    ax = fig.add_axes([0, 0, 1, 1])
-                    # ax = fig.add_axes([0.75, 0, 0.25, 0.25])
-                    ax.set_xticks([])
-                    ax.set_yticks([])
-                    
-                    # Visualization of each small picture
-                    # axs = []
-
-                    for k, v in samples.items():
-                        if (k >= len(categories)):
-                            continue
-                        cmap = cmaps[k % len(cmaps)]
-                        color = cmap(1.0)
-                        label = categories[k]
-                        xs = v[0][:, 0]
-                        ys = v[0][:, 1]
-                        # imgs = v[1]
-                        
-                        # if (len(xs) != len(imgs)):
-                        #     import pdb; pdb.set_trace()
-
-                        ax.scatter(xs, ys, c=[color] * len(xs), label=label)
-
-                        # for i, img in enumerate(imgs):
-                        #     ax_img = fig.add_axes([xs[i]+img_size/2, ys[i]+img_size/2, img_size, img_size])
-                        #     ax_img.imshow(-img+1.0, cmap=cmap)
-                        #     ax_img.axis('off')
-                        #     axs.append(ax_img)
-
-                    # ax.legend()
-
-                    np.save(os.path.join(self.local_dir, f"logits_samples_processed_{mode}_{seed}.npy"), samples, allow_pickle=True)
-                    plt.savefig(os.path.join(self.local_dir, f'logits_tsne_{mode}_{seed}.png'))
-
-            self.config['categories'] = categories_backup
-                    
-        for m in self.modes:
-            test_data[m].dispose()
-        
-        # Restore from backup
+    # def visualize_feat(self,
+    #               modes=['test'],
+    #               categories=None,
+    #               num_per_categories=100,
+    #               img_size=0.025,
+    #               width=28,
+    #               figsize=(48, 27),
+    #               colors = ['#d53e4f', '#f46d43', '#fdae61', '#fee08b',
+    #                         '#e6f598', '#abdda4', '#66c2a5', '#3288bd',]):
+    #     cmaps = [
+    #         LinearSegmentedColormap.from_list(f'sketch_{i}', ['white', color]) for i, color in enumerate(colors)
+    #     ]
+    #
+    #     # During visualize(), 'test' datasets are required
+    #     self.modes = modes
+    #
+    #     test_data = self.prepare_dataset()
+    #     num_categories = len(self.config['categories'])
+    #     self.logger.info(f"Number of categories: {num_categories}")
+    #
+    #     data_loaders = self.create_data_loaders(test_data)
+    #
+    #     for seed in self.config['seed']:
+    #         # Temporarily use user-specific categories.
+    #         categories_backup = self.config['categories']
+    #         if categories is not None:
+    #             self.config['categories'] = categories
+    #         else:
+    #             categories = self.config['categories']
+    #
+    #         # initialize network
+    #         net = self.create_model(num_categories)
+    #         path_prefix = os.path.join(self.model_dir, f'_iter_best_{seed}')
+    #         net.load(path_prefix)
+    #
+    #         self.logger.info(f"Read model of seed {seed}.")
+    #         fix_seed(seed)
+    #
+    #         self.logger.info('-' * 20)
+    #
+    #         # self.modes = ['test']
+    #         with torch.no_grad():
+    #             for mode in self.modes:
+    #                 self.logger.info(f"Start {mode} mode.")
+    #                 net.eval_mode()
+    #
+    #                 samples = dict()
+    #                 pbar = tqdm.tqdm(total=len(data_loaders[mode]))
+    #
+    #                 for _, data_batch in enumerate(data_loaders[mode]):
+    #                     # self.step_counters[mode] += 1
+    #
+    #                     feats_batch, categories_batch = self.embed_batch(net, data_batch)
+    #                     feats_batch = feats_batch.cpu().numpy()
+    #                     categories_batch = categories_batch.cpu().numpy()
+    #
+    #                     for i in range(len(feats_batch)):
+    #                         if categories_batch[i] not in samples.keys():
+    #                             samples[categories_batch[i]] = [[], []]
+    #                         if len(samples[categories_batch[i]][0]) < num_per_categories:
+    #                             samples[categories_batch[i]][0].append(feats_batch[i])
+    #                             #
+    #                             # cur_img = None
+    #                             # if isinstance(data_batch, dict):  # QuickDrawDataset
+    #                             #     cur_seq = data_batch['points3'][i].cpu().numpy()
+    #                             #     cur_seq = np.concatenate([cur_seq[[0], :], np.diff(cur_seq, axis=0)], axis=0)
+    #                             #
+    #                             #     draw_strokes(cur_seq, os.path.join(self.local_dir, 'tmp.svg'), width=width)
+    #                             #     with open(os.path.join(self.local_dir, 'tmp.svg'), 'r') as f_in:
+    #                             #         svg = f_in.read()
+    #                             #         f_in.close()
+    #                             #     cairosvg.svg2png(bytestring=svg, write_to=os.path.join(self.local_dir, 'tmp.png'))
+    #                             #     cur_img = np.array(Image.open(os.path.join(self.local_dir, 'tmp.png'))) / 255.0
+    #                             #     cur_img = np.sum(cur_img, axis=-1)
+    #                             #     # import pdb; pdb.set_trace()
+    #                             #
+    #                             # elif isinstance(data_batch, list): # SketchDataset
+    #                             #     cur_img = data_batch[3][i, 0, :, :].cpu().numpy()
+    #                             # else:
+    #                             #     raise NotImplementedError(f'Unexpected type of `data_batch`: {type(data_batch)}')
+    #                             # samples[categories_batch[i]][1].append(cur_img)
+    #
+    #                     pbar.update()
+    #                 pbar.close()
+    #
+    #                 # np.save(os.path.join(self.local_dir, f"feats_samples_{mode}_{seed}.npy"), samples, allow_pickle=True)
+    #
+    #                 feats = np.concatenate([samples[i][0] for i in range(len(categories))])
+    #
+    #                 warnings.simplefilter('ignore', FutureWarning)
+    #                 tsne = TSNE(n_components=2,
+    #                     verbose=False, perplexity=30,
+    #                     n_iter=1000,
+    #                     init="pca",
+    #                     learning_rate='auto',
+    #                     method='barnes_hut',
+    #                     random_state=42)
+    #
+    #                 feats_reduced = tsne.fit_transform(feats)
+    #
+    #                 feats_normed = (feats_reduced - feats_reduced.min(axis=0, keepdims=True)) / (feats_reduced.max(axis=0, keepdims=True) - feats_reduced.min(axis=0, keepdims=True))
+    #                 feats_normed = feats_normed * (1 - 2*img_size) + img_size
+    #
+    #                 feats_per_category = np.split(feats_normed, len(categories))
+    #                 for i in range(len(categories)):
+    #                     samples[i][0] = feats_per_category[i]
+    #
+    #                 fig = plt.figure(figsize=figsize)
+    #
+    #                 # White background.
+    #                 # Removing this code can result in a transparent background.
+    #                 bg = fig.add_axes([0, 0, 1, 1])
+    #                 bg.set_xticks([])
+    #                 bg.set_yticks([])
+    #                 bg.axis('off')
+    #
+    #                 # Scatter graph
+    #                 ax = fig.add_axes([0.75, 0, 0.25, 0.25])
+    #                 ax.set_xticks([])
+    #                 ax.set_yticks([])
+    #
+    #                 # Visualization of each small picture
+    #                 axs = []
+    #
+    #                 for k, v in samples.items():
+    #                     if (k >= len(categories)):
+    #                         continue
+    #                     cmap = cmaps[k % len(cmaps)]
+    #                     color = cmap(1.0)
+    #                     label = categories[k]
+    #                     xs = v[0][:, 0]
+    #                     ys = v[0][:, 1]
+    #                     imgs = v[1]
+    #
+    #                     # import pdb; pdb.set_trace()
+    #                     if (len(xs) != len(imgs)):
+    #                         import pdb; pdb.set_trace()
+    #
+    #                     ax.scatter(xs, ys, c=[color] * len(xs), label=label)
+    #
+    #                     for i, img in enumerate(imgs):
+    #                         ax_img = fig.add_axes([xs[i]+img_size/2, ys[i]+img_size/2, img_size, img_size])
+    #                         ax_img.imshow(-img+1.0, cmap=cmap)
+    #                         ax_img.axis('off')
+    #                         axs.append(ax_img)
+    #
+    #                 ax.legend()
+    #
+    #                 np.save(os.path.join(self.local_dir, f"feats_samples_processed_{mode}_{seed}.npy"), samples, allow_pickle=True)
+    #                 plt.savefig(os.path.join(self.local_dir, f'feats_tsne_{mode}_{seed}.png'))
+    #
+    #         self.config['categories'] = categories_backup
+    #
+    #     for m in self.modes:
+    #         test_data[m].dispose()
+    #
+    #     # Restore from backup
+    #
+    # def visualize_logit(self,
+    #               modes=['test'],
+    #               categories=None,
+    #               num_per_categories=100,
+    #               img_size=0.025,
+    #               figsize=(48, 27),
+    #               colors = ['#d53e4f', '#f46d43', '#fdae61', '#fee08b',
+    #                         '#e6f598', '#abdda4', '#66c2a5', '#3288bd',]):
+    #     cmaps = [
+    #         LinearSegmentedColormap.from_list(f'sketch_{i}', ['white', color]) for i, color in enumerate(colors)
+    #     ]
+    #
+    #     # During visualize(), 'test' datasets are required
+    #     self.modes = modes
+    #
+    #     test_data = self.prepare_dataset()
+    #     num_categories = len(self.config['categories'])
+    #     self.logger.info(f"Number of categories: {num_categories}")
+    #
+    #     data_loaders = self.create_data_loaders(test_data)
+    #
+    #     for seed in self.config['seed']:
+    #         # Temporarily use user-specific categories.
+    #         categories_backup = self.config['categories']
+    #         if (categories is not None):
+    #             self.config['categories'] = categories
+    #         else:
+    #             categories = self.config['categories']
+    #
+    #         # initialize network
+    #         net = self.create_model(num_categories)
+    #         path_prefix = os.path.join(self.model_dir, f'_iter_best_{seed}')
+    #         net.load(path_prefix)
+    #
+    #         self.logger.info(f"Read model of seed {seed}.")
+    #         fix_seed(seed)
+    #
+    #         self.logger.info('-' * 20)
+    #
+    #         # self.modes = ['test']
+    #         with torch.no_grad():
+    #             for mode in self.modes:
+    #                 self.logger.info(f"Start {mode} mode.")
+    #                 net.eval_mode()
+    #
+    #                 samples = dict()
+    #                 pbar = tqdm.tqdm(total=len(data_loaders[mode]))
+    #
+    #                 for _, data_batch in enumerate(data_loaders[mode]):
+    #                     # self.step_counters[mode] += 1
+    #
+    #                     feats_batch, categories_batch = self.embed_batch(net, data_batch)
+    #                     feats_batch = feats_batch.cpu().numpy()
+    #                     categories_batch = categories_batch.cpu().numpy()
+    #
+    #                     for i in range(len(feats_batch)):
+    #                         if (categories_batch[i] not in samples.keys()):
+    #                             samples[categories_batch[i]] = [[], []]
+    #                         if (len(samples[categories_batch[i]][0])) < num_per_categories:
+    #                             samples[categories_batch[i]][0].append(feats_batch[i])
+    #
+    #                             # cur_img = None
+    #                             # if (isinstance(data_batch, dict)):  # QuickDrawDataset
+    #                             #     cur_seq = data_batch['points3'][i].cpu().numpy()
+    #                             #     # import pdb; pdb.set_trace()
+    #                             #     cur_seq = np.concatenate([cur_seq[[0], :], np.diff(cur_seq, axis=0)], axis=0)
+    #
+    #                             #     draw_strokes(cur_seq, os.path.join(self.local_dir, 'tmp.svg'), width=224)
+    #                             #     with open(os.path.join(self.local_dir, 'tmp.svg'), 'r') as f_in:
+    #                             #         svg = f_in.read()
+    #                             #         f_in.close()
+    #                             #     cairosvg.svg2png(bytestring=svg, write_to=os.path.join(self.local_dir, 'tmp.png'))
+    #                             #     cur_img = np.array(Image.open(os.path.join(self.local_dir, 'tmp.png'))) / 255.0
+    #                             #     cur_img = np.sum(cur_img, axis=-1)
+    #                             #     # import pdb; pdb.set_trace()
+    #
+    #                             # elif (isinstance(data_batch, list)): # SketchDataset
+    #                             #     cur_img = data_batch[3][i, 0, :, :].cpu().numpy()
+    #                             # else:
+    #                             #     raise NotImplementedError(f'Unexpected type of `data_batch`: {type(data_batch)}')
+    #                             # samples[categories_batch[i]][1].append(cur_img)
+    #
+    #                     pbar.update()
+    #                 pbar.close()
+    #
+    #                 # np.save(os.path.join(self.local_dir, f"samples_{mode}_{seed}.npy"), samples, allow_pickle=True)
+    #
+    #                 feats = np.concatenate([samples[i][0] for i in range(len(categories))])
+    #
+    #                 warnings.simplefilter('ignore', FutureWarning)
+    #                 tsne = TSNE(n_components=2,
+    #                     verbose=False, perplexity=30,
+    #                     n_iter=1000,
+    #                     init="pca",
+    #                     learning_rate='auto',
+    #                     method='barnes_hut',
+    #                     random_state=42)
+    #
+    #                 feats_reduced = tsne.fit_transform(feats)
+    #
+    #                 feats_normed = (feats_reduced - feats_reduced.min(axis=0, keepdims=True)) / (feats_reduced.max(axis=0, keepdims=True) - feats_reduced.min(axis=0, keepdims=True))
+    #                 feats_normed = feats_normed * (1 - 2*img_size) + img_size
+    #
+    #                 feats_per_category = np.split(feats_normed, len(categories))
+    #                 for i in range(len(categories)):
+    #                     samples[i][0] = feats_per_category[i]
+    #
+    #                 fig = plt.figure(figsize=figsize)
+    #
+    #                 # White background.
+    #                 # Removing this code can result in a transparent background.
+    #                 # bg = fig.add_axes([0, 0, 1, 1])
+    #                 # bg.set_xticks([])
+    #                 # bg.set_yticks([])
+    #                 # bg.axis('off')
+    #
+    #                 # Scatter graph
+    #                 ax = fig.add_axes([0, 0, 1, 1])
+    #                 # ax = fig.add_axes([0.75, 0, 0.25, 0.25])
+    #                 ax.set_xticks([])
+    #                 ax.set_yticks([])
+    #
+    #                 # Visualization of each small picture
+    #                 # axs = []
+    #
+    #                 for k, v in samples.items():
+    #                     if (k >= len(categories)):
+    #                         continue
+    #                     cmap = cmaps[k % len(cmaps)]
+    #                     color = cmap(1.0)
+    #                     label = categories[k]
+    #                     xs = v[0][:, 0]
+    #                     ys = v[0][:, 1]
+    #                     # imgs = v[1]
+    #
+    #                     # if (len(xs) != len(imgs)):
+    #                     #     import pdb; pdb.set_trace()
+    #
+    #                     ax.scatter(xs, ys, c=[color] * len(xs), label=label)
+    #
+    #                     # for i, img in enumerate(imgs):
+    #                     #     ax_img = fig.add_axes([xs[i]+img_size/2, ys[i]+img_size/2, img_size, img_size])
+    #                     #     ax_img.imshow(-img+1.0, cmap=cmap)
+    #                     #     ax_img.axis('off')
+    #                     #     axs.append(ax_img)
+    #
+    #                 # ax.legend()
+    #
+    #                 np.save(os.path.join(self.local_dir, f"logits_samples_processed_{mode}_{seed}.npy"), samples, allow_pickle=True)
+    #                 plt.savefig(os.path.join(self.local_dir, f'logits_tsne_{mode}_{seed}.png'))
+    #
+    #         self.config['categories'] = categories_backup
+    #
+    #     for m in self.modes:
+    #         test_data[m].dispose()
+    #
+    #     # Restore from backup

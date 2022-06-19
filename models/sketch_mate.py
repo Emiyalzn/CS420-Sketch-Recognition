@@ -46,4 +46,6 @@ class SketchMate(BaseModel):
         cnnfeat = self.cnn(imgs)
         rnnfeat = self.rnn(points_offset, lengths)
         fused_feat = torch.cat([cnnfeat, rnnfeat], dim=1)
+        fused_feat = self.fc(fused_feat)
+
         return fused_feat
